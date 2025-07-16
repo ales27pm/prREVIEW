@@ -1,15 +1,24 @@
 {
   "name": "pr-review-extension",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Chrome extension for AI-powered PR reviews",
   "type": "module",
   "scripts": {
-    "format": "prettier --write \"extension/**/*.{js,css,html,json}\"",
-    "test": "prettier --check \"extension/**/*.{js,css,html,json}\" && NODE_OPTIONS=--experimental-vm-modules jest"
+    "format": "prettier --write \"**/*.{js,css,html,json}\"",
+    "lint": "prettier --check \"**/*.{js,css,html,json}\"",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch"
   },
   "devDependencies": {
     "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
     "p-limit": "^3.1.0",
-    "prettier": "^2.8.8"
+    "prettier": "^3.3.2"
+  },
+  "jest": {
+    "testEnvironment": "jest-environment-jsdom",
+    "moduleNameMapper": {
+      "^(./p-limit.js)$": "<rootDir>/extension/p-limit.js"
+    }
   }
 }

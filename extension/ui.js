@@ -29,15 +29,19 @@ export function createStatusIndicator() {
 }
 
 /**
- * Updates the status indicator's message and spinner visibility.
+ * Updates the status indicator with a new message and adjusts spinner visibility.
  *
- * If the status indicator does not exist, it is created. The displayed message is updated, and the spinner is shown or hidden based on whether the operation is complete or an error has occurred.
+ * Creates the status indicator if it does not exist, sets the displayed message, and shows or hides the spinner based on error or completion state. If an error or completion is indicated, the status indicator is automatically removed after 5 seconds.
  *
- * @param {string} message - The status message to display.
- * @param {boolean} [isError=false] - Whether the status represents an error.
- * @param {boolean} [isComplete=false] - Whether the operation is complete.
+ * @param {string} message - The message to display in the status indicator.
+ * @param {Object} [options] - Options to control indicator state.
+ * @param {boolean} [options.isError=false] - Set to true if the status represents an error.
+ * @param {boolean} [options.isComplete=false] - Set to true if the operation is complete.
  */
-export function updateStatus(message, isError = false, isComplete = false) {
+export function updateStatus(
+  message,
+  { isError = false, isComplete = false } = {},
+) {
   if (!statusIndicator) createStatusIndicator();
   const statusText = document.getElementById("ai-review-status-text");
   const spinner = statusIndicator?.querySelector(".spinner");
@@ -46,10 +50,12 @@ export function updateStatus(message, isError = false, isComplete = false) {
     statusText.textContent = message;
   }
 
+  if (spinner) {
+    spinner.style.display = isError || isComplete ? "none" : "block";
+  }
+
   if (isError || isComplete) {
-    if (spinner) spinner.style.display = "none";
-  } else {
-    if (spinner) spinner.style.display = "block";
+    setTimeout(removeStatusIndicator, 5000);
   }
 }
 
