@@ -1,5 +1,3 @@
-Instead of a custom linked‐list, you can keep all existing APIs (enqueue, dequeue, peek, clear, size, iterator) with a much simpler array‐backed implementation:
-
 export default class Queue {
   #items = [];
 
