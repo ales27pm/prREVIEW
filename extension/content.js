@@ -12,6 +12,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   return true;
 });
 
+/**
+ * Runs the AI-powered review process for a GitHub pull request.
+ *
+ * Orchestrates fetching pull request data, filtering changed files, requesting AI-generated review comments for each file, posting comments to GitHub, and updating the UI with progress and error messages. Limits concurrent AI review requests to five files at a time. Reloads the page upon completion.
+ *
+ * @param {Object} prDetails - Details of the pull request to review.
+ */
 async function runReviewFlow(prDetails) {
   ui.createStatusIndicator();
   ui.updateStatus("Starting AI review...");
