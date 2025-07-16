@@ -28,6 +28,15 @@ export function createStatusIndicator() {
   };
 }
 
+/**
+ * Updates the status indicator's message and spinner visibility.
+ *
+ * If the status indicator does not exist, it is created. The displayed message is updated, and the spinner is shown or hidden based on whether the operation is complete or an error has occurred.
+ *
+ * @param {string} message - The status message to display.
+ * @param {boolean} [isError=false] - Whether the status represents an error.
+ * @param {boolean} [isComplete=false] - Whether the operation is complete.
+ */
 export function updateStatus(message, isError = false, isComplete = false) {
   if (!statusIndicator) createStatusIndicator();
   const statusText = document.getElementById("ai-review-status-text");
