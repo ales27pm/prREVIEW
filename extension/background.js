@@ -12,8 +12,9 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 /**
- * Main function to initiate the review process.
- * @param {chrome.tabs.Tab} tab The active tab.
+ * Initiates the AI review process on a GitHub pull request page by extracting PR details from the given tab's URL and sending a message to the content script to start the review.
+ * If the tab is not a valid PR page, logs a message and does not trigger the review.
+ * @param {chrome.tabs.Tab} tab The active browser tab to process.
  */
 function startReview(tab) {
   const prDetails = extractPRDetails(tab.url);

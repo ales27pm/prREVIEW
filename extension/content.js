@@ -3,6 +3,11 @@
 // --- UI Management ---
 let statusIndicator;
 
+/**
+ * Creates and displays a persistent status indicator UI element on the page for AI review progress.
+ *
+ * If the indicator already exists, the function does nothing. The indicator includes a spinner, status text, and a close button, and injects necessary styles for proper appearance and behavior.
+ */
 function createStatusIndicator() {
   if (document.getElementById("ai-review-status-indicator")) return;
 
@@ -40,6 +45,15 @@ function createStatusIndicator() {
   document.head.appendChild(style);
 }
 
+/**
+ * Updates the status indicator message and spinner visibility on the page.
+ * 
+ * If the status indicator does not exist, it is created. The spinner is hidden when the status represents an error or completion.
+ * 
+ * @param {string} message - The status message to display.
+ * @param {boolean} [isError=false] - Whether the status represents an error.
+ * @param {boolean} [isComplete=false] - Whether the status represents completion.
+ */
 function updateStatus(message, isError = false, isComplete = false) {
   if (!statusIndicator) createStatusIndicator();
   document.getElementById("ai-review-status-text").textContent = message;
@@ -60,6 +74,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   return true;
 });
 
+/**
+ * Runs the AI-powered code review process for a GitHub pull request.
+ *
+ * Retrieves API keys, fetches pull request files and metadata, sends each file's diff to the OpenAI API for review, and posts any resulting comments back to the pull request on GitHub. Updates the UI status indicator throughout the process and reloads the page upon completion. If required API keys are missing or an error occurs, updates the status indicator with an error message.
+ * @param {Object} prDetails - Details of the pull request, including owner, repo, and prNumber.
+ */
 async function runReviewFlow(prDetails) {
   updateStatus("Starting AI review...");
 
