@@ -136,10 +136,19 @@ async function runReviewFlow(prDetails) {
         }
       );
 
-      if (!response.ok) continue; // Silently skip files the AI fails on
+      if (!response.ok) {
+        console.error(`AI analysis failed for ${file.filename}: ${response.status} ${response.statusText}`);
+        continue;
+      }
 
       const aiResponse = await response.json();
-      const feedback = JSON.parse(aiResponse.choices[0].message.content);
+      let feedback;
+      try {
+        feedback = JSON.parse(aiResponse.choices[0].message.content);
+      } catch (error) {
+        console.error(`Failed to parse AI response for ${file.filename}:`, error);
+        continue;
+      }
 
       if (feedback.comments && feedback.comments.length > 0) {
         for (const comment of feedback.comments) {
