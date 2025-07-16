@@ -1,9 +1,12 @@
 // extension/utils.js
 
 /**
- * Extract owner, repo and PR number from a GitHub pull request URL.
- * @param {string} url
- * @returns {{owner: string, repo: string, prNumber: number}|null}
+ * Parses a GitHub pull request URL and extracts the repository owner, repository name, and pull request number.
+ *
+ * Returns an object with `owner`, `repo`, and `prNumber` if the URL is a valid GitHub pull request URL; otherwise, returns `null`.
+ *
+ * @param {string} url - The GitHub pull request URL to parse.
+ * @returns {{owner: string, repo: string, prNumber: number} | null} The extracted details or `null` if the URL is invalid.
  */
 function extractPRDetails(url) {
   if (!url) return null;
