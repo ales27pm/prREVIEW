@@ -1,5 +1,4 @@
-You can drop both the `AsyncResource` shim and the custom `yocto-queue` import and replace them with a simple array-based queue and microtask scheduling. This preserves all existing functionality (activeCount, pendingCount, clearQueue) but removes the hook-specific plumbing:
-
+# (Lines 1–2 removed)
 ```js
 export default function pLimit(concurrency) {
   if (!(Number.isInteger(concurrency) && concurrency > 0)) {
