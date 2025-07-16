@@ -1,20 +1,25 @@
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 
 /**
- * Submits a unified diff patch to the OpenAI API for automated code review and returns structured feedback.
+ * Retrieves the OpenAI API key from Chrome's synchronized storage.
  *
- * Sends the provided patch to the OpenAI chat completions endpoint using the specified configuration, and returns an object containing an array of review comments. Handles authentication errors, invalid HTTP responses, and malformed or unexpected API responses. If the response does not contain valid comments, returns an empty array.
- *
- * @param {string} patch - The unified diff patch to be reviewed.
- * @param {object} config - Configuration object with OpenAI API credentials, model, and system prompt.
- * @returns {Promise<{comments: Array<{line: number, body: string}>}>} An object containing an array of code review comments, or an empty array if none are found.
- * @throws {Error} If authentication fails, the API response is invalid, or the returned JSON is malformed.
+ * @returns {Promise<string|null>} The stored OpenAI API key, or null if not found.
  */
 async function getStoredApiKey() {
   const result = await chrome.storage.sync.get("openAIApiKey");
   return result.openAIApiKey || null;
 }
 
+/**
+ * Submits a unified diff patch to the OpenAI API for automated code review and returns structured feedback.
+ *
+ * The function sends the provided patch to the OpenAI chat completions endpoint, using the specified or stored API key, model, and system prompt. It parses and validates the AI's response, returning an object containing a `comments` array with review feedback for the patch.
+ *
+ * @param {string} patch - The unified diff patch to be reviewed.
+ * @param {Object} [config] - Optional configuration for the API request, including `openAIApiKey`, `openAIModel`, and `systemPrompt`.
+ * @returns {Promise<{comments: Array<{line: number, body: string}>}>} An object containing an array of review comments.
+ * @throws {Error} If the API key is missing, authentication fails, the API response is invalid, or the AI returns malformed JSON.
+ */
 export async function getReviewForPatch(patch, config = {}) {
   const storedKey = await getStoredApiKey();
   const openAIApiKey = config.openAIApiKey || storedKey;

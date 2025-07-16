@@ -24,8 +24,8 @@ function showStatus(message, type = "success") {
 }
 
 /**
- * Loads saved GitHub and OpenAI API credentials from browser storage and populates the input fields.
- * Displays an error status message if loading fails.
+ * Loads saved GitHub and OpenAI API credentials from synchronized browser storage and fills the corresponding input fields.
+ * Shows an error status message if retrieval fails.
  */
 async function loadSettings() {
   try {
@@ -43,8 +43,8 @@ async function loadSettings() {
 }
 
 /**
- * Saves the GitHub token and OpenAI API key from input fields to browser storage.
- * Displays a status message indicating success or failure. If either input is empty, shows an error and does not save.
+ * Saves the GitHub token and OpenAI API key from input fields to synchronized browser storage.
+ * Shows a status message indicating whether the save was successful or if required fields are missing.
  */
 async function saveSettings() {
   const githubToken = githubTokenInput.value.trim();
