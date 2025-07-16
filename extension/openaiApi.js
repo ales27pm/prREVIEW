@@ -15,7 +15,7 @@ import { loadSettings } from "./settings.js";
 export async function getReviewForPatch(patch, config = {}) {
   const settings = await loadSettings();
   const openAIApiKey = config.openAIApiKey || settings.openAIApiKey;
-  const { openAIModel, systemPrompt } = config;
+  const { openAIModel, systemPrompt, maxTokens, temperature } = config;
 
   if (!openAIApiKey) {
     throw new Error(
@@ -31,6 +31,8 @@ export async function getReviewForPatch(patch, config = {}) {
     },
     body: JSON.stringify({
       model: openAIModel,
+      max_tokens: maxTokens,
+      temperature,
       messages: [
         { role: "system", content: systemPrompt },
         {

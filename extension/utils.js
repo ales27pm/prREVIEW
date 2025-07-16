@@ -5,7 +5,7 @@
  * @param {string} url
  * @returns {{owner: string, repo: string, prNumber: number}|null}
  */
-function extractPRDetails(url) {
+function getPRDetails(url) {
   if (!url) return null;
   try {
     const parsed = new URL(url);
@@ -21,9 +21,9 @@ function extractPRDetails(url) {
   }
 }
 
-export { extractPRDetails };
+export { getPRDetails };
 
 // Support CommonJS for Jest
 if (typeof module !== "undefined") {
-  module.exports = { extractPRDetails };
+  module.exports = { getPRDetails };
 }
