@@ -1,4 +1,5 @@
 const GITHUB_API_URL = "https://api.github.com";
+export const SUMMARY_HEADER = "<!-- ai-review-summary -->";
 
 /**
  * Processes a GitHub API HTTP response, throwing descriptive errors for authentication, rate limiting, permission, or missing resource issues, and returns the parsed JSON body or null for empty responses.
@@ -153,15 +154,40 @@ export async function postComment({
  */
 export async function postSummaryComment({ prDetails, token, body }) {
   const { owner, repo, prNumber } = prDetails;
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+    Accept: "application/vnd.github.v3+json",
+  };
+
+  const listRes = await fetch(
+    `${GITHUB_API_URL}/repos/${owner}/${repo}/issues/${prNumber}/comments?per_page=100`,
+    {
+      headers,
+    },
+  );
+  const comments = await handleGitHubResponse(listRes);
+  const existing =
+    Array.isArray(comments) &&
+    comments.find((c) => c.body && c.body.startsWith(SUMMARY_HEADER));
+
+  if (existing) {
+    const res = await fetch(
+      `${GITHUB_API_URL}/repos/${owner}/${repo}/issues/comments/${existing.id}`,
+      {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ body }),
+      },
+    );
+    return handleGitHubResponse(res);
+  }
+
   const res = await fetch(
     `${GITHUB_API_URL}/repos/${owner}/${repo}/issues/${prNumber}/comments`,
     {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        Accept: "application/vnd.github.v3+json",
-      },
+      headers,
       body: JSON.stringify({ body }),
     },
   );

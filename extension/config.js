@@ -50,8 +50,8 @@ export async function loadConfig() {
           ? settings.temperature
           : DEFAULT_TEMPERATURE,
       systemPrompt:
-        PERSONA_PROMPTS[settings.reviewPersona] ||
         settings.systemPrompt ||
+        PERSONA_PROMPTS[settings.reviewPersona] ||
         DEFAULT_PROMPT,
       reviewPersona: settings.reviewPersona || "",
       concurrencyLimit: settings.concurrencyLimit || 5,

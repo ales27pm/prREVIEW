@@ -74,12 +74,19 @@ describe("githubApi", () => {
 
   describe("postSummaryComment", () => {
     it("posts a summary to the PR conversation", async () => {
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        status: 201,
-        json: async () => ({ id: 123 }),
-        headers: { get: () => null },
-      });
+      fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => [],
+          headers: { get: () => null },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 201,
+          json: async () => ({ id: 123 }),
+          headers: { get: () => null },
+        });
 
       const result = await github.postSummaryComment({
         prDetails: { owner: "o", repo: "r", prNumber: 5 },
@@ -87,7 +94,13 @@ describe("githubApi", () => {
         body: "summary",
       });
 
-      expect(fetch).toHaveBeenCalledWith(
+      expect(fetch).toHaveBeenNthCalledWith(
+        1,
+        "https://api.github.com/repos/o/r/issues/5/comments?per_page=100",
+        expect.objectContaining({ headers: expect.any(Object) }),
+      );
+      expect(fetch).toHaveBeenNthCalledWith(
+        2,
         "https://api.github.com/repos/o/r/issues/5/comments",
         expect.objectContaining({
           method: "POST",
@@ -96,6 +109,41 @@ describe("githubApi", () => {
         }),
       );
       expect(result).toEqual({ id: 123 });
+    });
+
+    it("updates an existing summary comment", async () => {
+      fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => [
+            { id: 10, body: `${github.SUMMARY_HEADER} old summary` },
+          ],
+          headers: { get: () => null },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ id: 10 }),
+          headers: { get: () => null },
+        });
+
+      const result = await github.postSummaryComment({
+        prDetails: { owner: "o", repo: "r", prNumber: 5 },
+        token: "t",
+        body: "new summary",
+      });
+
+      expect(fetch).toHaveBeenNthCalledWith(
+        2,
+        "https://api.github.com/repos/o/r/issues/comments/10",
+        expect.objectContaining({
+          method: "PATCH",
+          headers: expect.objectContaining({ Authorization: "Bearer t" }),
+          body: JSON.stringify({ body: "new summary" }),
+        }),
+      );
+      expect(result).toEqual({ id: 10 });
     });
   });
 });
