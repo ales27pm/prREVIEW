@@ -30,12 +30,17 @@ export function createStatusIndicator() {
 
 export function updateStatus(message, isError = false, isComplete = false) {
   if (!statusIndicator) createStatusIndicator();
-  document.getElementById("ai-review-status-text").textContent = message;
-  const spinner = statusIndicator.querySelector(".spinner");
+  const statusText = document.getElementById("ai-review-status-text");
+  const spinner = statusIndicator?.querySelector(".spinner");
+  
+  if (statusText) {
+    statusText.textContent = message;
+  }
+  
   if (isError || isComplete) {
-    spinner.style.display = "none";
+    if (spinner) spinner.style.display = "none";
   } else {
-    spinner.style.display = "block";
+    if (spinner) spinner.style.display = "block";
   }
 }
 
