@@ -180,5 +180,5 @@ async function postPRComment(
 
 // Export for testing in Node environment
 if (typeof module !== "undefined") {
-  module.exports = { extractChangesFromDiff };
+  module.exports = { extractChangesFromDiff, extractPRDetails };
 }
