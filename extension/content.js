@@ -3,6 +3,9 @@
 // --- UI Management ---
 let statusIndicator;
 
+/**
+ * Injects the status indicator stylesheet into the document if it is not already present.
+ */
 function injectStyle() {
   if (document.getElementById("ai-review-style")) return;
   const link = document.createElement("link");
@@ -12,6 +15,11 @@ function injectStyle() {
   document.head.appendChild(link);
 }
 
+/**
+ * Creates and displays a floating status indicator on the page for AI review progress.
+ *
+ * If the indicator already exists, it does nothing. The indicator includes a spinner, status text, and a close button that removes it from the DOM.
+ */
 function createStatusIndicator() {
   if (document.getElementById("ai-review-status-indicator")) return;
 
@@ -33,6 +41,12 @@ function createStatusIndicator() {
   // Styles are injected from status.css
 }
 
+/**
+ * Updates the status indicator UI with a new message and adjusts the spinner display based on error or completion state.
+ * @param {string} message - The status message to display.
+ * @param {boolean} [isError=false] - Whether the status represents an error.
+ * @param {boolean} [isComplete=false] - Whether the status represents completion.
+ */
 function updateStatus(message, isError = false, isComplete = false) {
   if (!statusIndicator) createStatusIndicator();
   document.getElementById("ai-review-status-text").textContent = message;
@@ -44,6 +58,14 @@ function updateStatus(message, isError = false, isComplete = false) {
   }
 }
 
+/**
+ * Retrieves all files changed in a GitHub pull request, handling pagination as needed.
+ * @param {string} owner - The repository owner's username.
+ * @param {string} repo - The repository name.
+ * @param {number} prNumber - The pull request number.
+ * @param {string} token - The GitHub API access token.
+ * @return {Promise<Array>} A promise that resolves to an array of file objects from the pull request.
+ */
 async function fetchAllPRFiles(owner, repo, prNumber, token) {
   const files = [];
   const perPage = 100;
@@ -72,6 +94,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   return true;
 });
 
+/**
+ * Performs an AI-assisted code review on a GitHub pull request using OpenAI and posts feedback as review comments.
+ *
+ * Retrieves API keys from storage, fetches all changed files in the PR, and sends each file's diff to OpenAI's GPT-4 Turbo model for analysis. For each AI-generated comment, posts a review comment to the corresponding line in the PR. Updates the UI status indicator throughout the process and reloads the page upon completion. Displays errors in the status indicator if encountered.
+ * @param {{owner: string, repo: string, prNumber: number}} prDetails - Details identifying the pull request to review.
+ */
 async function runReviewFlow(prDetails) {
   updateStatus("Starting AI review...");
 
