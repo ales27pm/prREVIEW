@@ -1,0 +1,28 @@
+body {
+  font-family: Arial, sans-serif;
+  text-align: center;
+  max-width: 240px;
+}
+
+button {
+  background-color: #238636;
+  color: white;
+  border: none;
+  padding: 10px;
+  cursor: pointer;
+  margin-top: 10px;
+  border-radius: 4px;
+}
+
+button:hover {
+  background-color: #1f6f2e;
+}
+
+button:focus-visible {
+  outline: 2px solid #005cc5;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
