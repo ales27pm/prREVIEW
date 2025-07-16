@@ -1,3 +1,9 @@
+/**
+ * Extracts the owner, repository name, and pull request number from a GitHub pull request URL.
+ *
+ * @param {string} url - The GitHub pull request URL to parse.
+ * @return {{ owner: string, repo: string, prNumber: number } | null} An object with the owner, repository name, and pull request number if the URL is valid, or null if the URL is invalid or does not match the expected GitHub pull request format.
+ */
 function extractPRDetails(url) {
   if (!url) return null;
   try {
