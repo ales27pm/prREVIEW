@@ -61,7 +61,7 @@ function queryActiveTab() {
 
 function getGitHubToken() {
   return new Promise((resolve) => {
-    chrome.storage.sync.get(["githubToken"], (result) => {
+    chrome.storage.local.get(["githubToken"], (result) => {
       resolve(result.githubToken);
     });
   });
@@ -69,7 +69,7 @@ function getGitHubToken() {
 
 function getOpenAIKey() {
   return new Promise((resolve) => {
-    chrome.storage.sync.get(["openaiKey"], (result) => {
+    chrome.storage.local.get(["openaiKey"], (result) => {
       resolve(result.openaiKey);
     });
   });
