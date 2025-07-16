@@ -1,9 +1,9 @@
 const GITHUB_API_URL = "https://api.github.com";
 
 /**
- * Processes a GitHub API HTTP response, throwing errors for authentication, access, or other failures, and returns parsed JSON data or null for empty responses.
- * @param {Response} res - The HTTP response object from a GitHub API request.
- * @return {Object|null} The parsed JSON response body, or null if the response has no content.
+ * Handles a GitHub API HTTP response, throwing errors for authentication or access issues, and returns parsed JSON data or null if the response is empty.
+ * @param {Response} res - The HTTP response from a GitHub API request.
+ * @return {Object|null} The parsed JSON body, or null if the response has no content.
  */
 function handleStatus(res) {
   if (res.status === 401) {
@@ -25,21 +25,21 @@ function handleStatus(res) {
 }
 
 /**
- * Fetches all files changed in a specified GitHub pull request, handling pagination up to a maximum of 50 pages.
- * @param {Object} params - The pull request details.
+ * Retrieves all files changed in a GitHub pull request by paginating through the API until all results are collected.
+ * @param {Object} params - Details identifying the pull request.
  * @param {string} params.owner - The repository owner's username.
  * @param {string} params.repo - The repository name.
  * @param {number} params.prNumber - The pull request number.
  * @param {string} token - The GitHub API authentication token.
- * @return {Promise<Array>} An array of file objects representing the files changed in the pull request.
+ * @return {Promise<Array>} A promise that resolves to an array of file objects changed in the pull request.
  */
 export async function fetchAllPRFiles({ owner, repo, prNumber }, token) {
   const files = [];
   const perPage = 100;
   let page = 1;
-  const maxPages = 50;
+  let keepFetching = true;
 
-  while (page <= maxPages) {
+  while (keepFetching) {
     const res = await fetch(
       `${GITHUB_API_URL}/repos/${owner}/${repo}/pulls/${prNumber}/files?per_page=${perPage}&page=${page}`,
       {
@@ -51,14 +51,11 @@ export async function fetchAllPRFiles({ owner, repo, prNumber }, token) {
     );
     const data = await handleStatus(res);
     files.push(...data);
-    if (data.length < perPage) break;
-    page++;
-  }
-
-  if (page > maxPages) {
-    console.warn(
-      `Reached maximum page limit (${maxPages}) while fetching PR files`
-    );
+    if (data.length < perPage) {
+      keepFetching = false;
+    } else {
+      page++;
+    }
   }
   return files;
 }

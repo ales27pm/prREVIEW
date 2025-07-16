@@ -3,59 +3,66 @@
 const saveButton = document.getElementById("save-settings");
 const githubTokenInput = document.getElementById("githubToken");
 const openAIApiKeyInput = document.getElementById("openAIApiKey");
-const githubStatus = document.getElementById("github-status");
-const openaiStatus = document.getElementById("openai-status");
+const statusElement = document.getElementById("form-status");
 
-// Load saved settings when the page opens
-document.addEventListener("DOMContentLoaded", async () => {
-  const { githubToken, openAIApiKey } = await chrome.storage.local.get([
-    "githubToken",
-    "openAIApiKey",
-  ]);
-  if (githubToken) {
-    githubTokenInput.value = githubToken;
+let statusTimeout;
+
+/**
+ * Displays a temporary status message with a specified type on the options page.
+ * 
+ * @param {string} message - The message to display.
+ * @param {string} [type="success"] - The type of status message ("success" or "error"), which determines the CSS class.
+ */
+function showStatus(message, type = "success") {
+  clearTimeout(statusTimeout);
+  statusElement.textContent = message;
+  statusElement.className = `status ${type}`;
+  statusTimeout = setTimeout(() => {
+    statusElement.textContent = "";
+    statusElement.className = "status";
+  }, 4000);
+}
+
+/**
+ * Loads saved GitHub and OpenAI API credentials from browser storage and populates the input fields.
+ * Displays an error status message if loading fails.
+ */
+async function loadSettings() {
+  try {
+    const settings = await chrome.storage.local.get();
+    if (settings.githubToken) {
+      githubTokenInput.value = settings.githubToken;
+    }
+    if (settings.openAIApiKey) {
+      openAIApiKeyInput.value = settings.openAIApiKey;
+    }
+  } catch (error) {
+    console.error("Failed to load settings:", error);
+    showStatus("Error loading settings.", "error");
   }
-  if (openAIApiKey) {
-    openAIApiKeyInput.value = openAIApiKey;
-  }
-});
+}
 
-const openaiStatus = document.getElementById("openai-status");
+/**
+ * Saves the GitHub token and OpenAI API key from input fields to browser storage.
+ * Displays a status message indicating success or failure. If either input is empty, shows an error and does not save.
+ */
+async function saveSettings() {
+  const githubToken = githubTokenInput.value.trim();
+  const openAIApiKey = openAIApiKeyInput.value.trim();
 
-let githubStatusTimeout;
-let openaiStatusTimeout;
-
-saveButton.addEventListener("click", () => {
-  const githubToken = githubTokenInput.value;
-  const openAIApiKey = openAIApiKeyInput.value;
-
-  if (!githubToken) {
-    githubStatus.textContent = "GitHub Token is required.";
-    githubStatus.className = "status error";
+  if (!githubToken || !openAIApiKey) {
+    showStatus("Both GitHub Token and OpenAI API Key are required.", "error");
     return;
   }
 
-  if (!openAIApiKey) {
-    openaiStatus.textContent = "OpenAI API Key is required.";
-    openaiStatus.className = "status error";
-    return;
+  try {
+    await chrome.storage.local.set({ githubToken, openAIApiKey });
+    showStatus("Settings saved successfully!");
+  } catch (error) {
+    console.error("Failed to save settings:", error);
+    showStatus("Error saving settings. Please try again.", "error");
   }
+}
 
-  chrome.storage.local.set({ githubToken, openAIApiKey }, () => {
-    // Clear any existing timeouts
-    clearTimeout(githubStatusTimeout);
-    clearTimeout(openaiStatusTimeout);
-
-    githubStatus.textContent = "GitHub Token Saved!";
-    githubStatus.className = "status success";
-    openaiStatus.textContent = "OpenAI Key Saved!";
-    openaiStatus.className = "status success";
-
-    githubStatusTimeout = setTimeout(() => {
-      githubStatus.textContent = "";
-    }, 3000);
-    openaiStatusTimeout = setTimeout(() => {
-      openaiStatus.textContent = "";
-    }, 3000);
-  });
-});
+document.addEventListener("DOMContentLoaded", loadSettings);
+saveButton.addEventListener("click", saveSettings);
