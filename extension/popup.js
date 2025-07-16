@@ -85,9 +85,18 @@ function getGithubToken() {
 }
 
 function extractPRDetails(url) {
-  const match = url.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
-  if (!match) return null;
-  return { owner: match[1], repo: match[2], prNumber: match[3] };
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname !== "github.com") return null;
+    const segments = parsed.pathname.split("/").filter(Boolean);
+    if (segments.length < 4 || segments[2] !== "pull") return null;
+    const prNumber = parseInt(segments[3], 10);
+    if (Number.isNaN(prNumber)) return null;
+    return { owner: segments[0], repo: segments[1], prNumber };
+  } catch (e) {
+    return null;
+  }
 }
 
 async function fetchPRDiffs({ owner, repo, prNumber }, githubToken) {

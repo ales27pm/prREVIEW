@@ -3,7 +3,7 @@ const { extractPRDetails } = require("../extension/popup.js");
 describe("extractPRDetails", () => {
   test("should extract details from a valid GitHub PR URL", () => {
     const url = "https://github.com/owner/repo-name/pull/123";
-    const expected = { owner: "owner", repo: "repo-name", prNumber: "123" };
+    const expected = { owner: "owner", repo: "repo-name", prNumber: 123 };
     expect(extractPRDetails(url)).toEqual(expected);
   });
 
@@ -12,8 +12,26 @@ describe("extractPRDetails", () => {
     const expected = {
       owner: "another-owner",
       repo: "another-repo",
-      prNumber: "456",
+      prNumber: 456,
     };
+    expect(extractPRDetails(url)).toEqual(expected);
+  });
+
+  test("should handle URLs with trailing slashes", () => {
+    const url = "https://github.com/owner/repo-name/pull/789/";
+    const expected = { owner: "owner", repo: "repo-name", prNumber: 789 };
+    expect(extractPRDetails(url)).toEqual(expected);
+  });
+
+  test("should handle URLs with query parameters", () => {
+    const url = "https://github.com/owner/repo-name/pull/1011?param=true";
+    const expected = { owner: "owner", repo: "repo-name", prNumber: 1011 };
+    expect(extractPRDetails(url)).toEqual(expected);
+  });
+
+  test("should handle URLs with hash fragments", () => {
+    const url = "https://github.com/owner/repo-name/pull/2022#discussion";
+    const expected = { owner: "owner", repo: "repo-name", prNumber: 2022 };
     expect(extractPRDetails(url)).toEqual(expected);
   });
 
