@@ -14,7 +14,7 @@
 const DEFAULT_MODEL = "gpt-4o";
 const DEFAULT_MAX_TOKENS = 1500;
 const DEFAULT_TEMPERATURE = 0.2;
-const DEFAULT_PROMPT = `You are an expert code reviewer. Your task is to analyze the provided code diff and return feedback in a JSON format. The JSON object should contain an array of "comments", where each comment has "line" (the line number relative to the diff) and "body" (your feedback). Provide feedback only if you find a substantive issue or a significant improvement. If there are no issues, return an empty "comments" array. The feedback should be concise and actionable. Diff format: Unified. The line number is the line number in the file that was changed.`;
+const DEFAULT_PROMPT = `You are an expert code reviewer. Think step by step about the diff you receive. Return a JSON object with two fields: "reasoning" - a short summary of your thought process - and "comments" - an array where each entry has "line" and "body" keys. Provide feedback only for substantive issues or improvements. The diff format is Unified and line numbers refer to the changed file.`;
 
 const PERSONA_PROMPTS = {
   strict:

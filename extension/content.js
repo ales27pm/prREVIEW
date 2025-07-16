@@ -38,6 +38,8 @@ async function runReviewFlow(prDetails) {
       github.getPRData(prDetails, config.githubToken),
     ]);
     const commitId = prData.head.sha;
+    config.prTitle = prData.title;
+    config.prBody = prData.body || "";
 
     const filesToReview = files.filter(
       (file) => file.patch && file.status !== "removed",
