@@ -75,6 +75,22 @@ async function saveFormSettings() {
     return;
   }
 
+  if (
+    maxTokensInput.value &&
+    (Number.isNaN(maxTokens) || maxTokens < 1 || maxTokens > 4000)
+  ) {
+    showStatus("Max Tokens must be a number between 1 and 4000.", "error");
+    return;
+  }
+
+  if (
+    temperatureInput.value &&
+    (Number.isNaN(temperature) || temperature < 0 || temperature > 2)
+  ) {
+    showStatus("Temperature must be between 0 and 2.", "error");
+    return;
+  }
+
   try {
     await persistSettings({
       githubToken,

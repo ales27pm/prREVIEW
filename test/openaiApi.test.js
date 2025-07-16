@@ -51,6 +51,7 @@ describe("getReviewForPatch", () => {
     );
     const body = fetchMock.mock.calls[0][1].body;
     expect(body).toContain('"max_tokens":100');
+    expect(body).toContain('"temperature":0.3');
     expect(body).toContain("diff");
     expect(result).toEqual({ comments: [{ line: 1, body: "hi" }] });
   });
