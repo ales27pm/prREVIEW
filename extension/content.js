@@ -2,6 +2,7 @@
 import * as ui from "./ui.js";
 import * as github from "./githubApi.js";
 import * as openai from "./openaiApi.js";
+import { loadConfig } from "./config.js";
 import pLimit from "./p-limit.js";
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -14,80 +15,83 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 async function runReviewFlow(prDetails) {
   ui.createStatusIndicator();
-  ui.updateStatus("Starting AI review...");
+  ui.updateStatus("Initializing AI review...");
 
   try {
-    const { githubToken, openAIApiKey } = await chrome.storage.local.get([
-      "githubToken",
-      "openAIApiKey",
-    ]);
-
-    if (!githubToken) {
-      ui.updateStatus(
-        "GitHub Token is missing. Please configure it in the extension options.",
-        true
-      );
-      return;
-    }
-    if (!openAIApiKey) {
-      ui.updateStatus(
-        "OpenAI API Key is missing. Please configure it in the extension options.",
-        true
-      );
+    const config = await loadConfig();
+    if (config.error) {
+      ui.updateStatus(config.error, { isError: true });
       return;
     }
 
     ui.updateStatus("Fetching PR data...");
-    const files = await github.fetchAllPRFiles(prDetails, githubToken);
-    const prData = await github.getPRData(prDetails, githubToken);
+    const [files, prData] = await Promise.all([
+      github.fetchAllPRFiles(prDetails, config.githubToken),
+      github.getPRData(prDetails, config.githubToken),
+    ]);
     const commitId = prData.head.sha;
 
-    const filesToReview = files.filter((file) => file.patch);
+    const filesToReview = files.filter(
+      (file) => file.patch && file.status !== "removed",
+    );
     if (filesToReview.length === 0) {
-      ui.updateStatus("No files with changes found to review.", false, true);
-      setTimeout(() => ui.removeStatusIndicator(), 3000);
+      ui.updateStatus("No reviewable file changes found.", {
+        isComplete: true,
+      });
       return;
     }
 
-    const limit = pLimit(5);
+    const limit = pLimit(config.concurrencyLimit);
     let filesAnalyzed = 0;
+    const reviewErrors = [];
+    const postedComments = [];
 
     const reviewPromises = filesToReview.map((file) =>
       limit(async () => {
         try {
-          const feedback = await openai.getReviewForPatch(
-            file.patch,
-            openAIApiKey
+          ui.updateStatus(
+            `Analyzing files... (${filesAnalyzed + 1}/${filesToReview.length})`,
           );
-          if (feedback.comments && feedback.comments.length > 0) {
-            const commentPromises = feedback.comments.map((comment) =>
-              github.postComment({
+          const feedback = await openai.getReviewForPatch(file.patch, config);
+          if (feedback && feedback.comments && feedback.comments.length > 0) {
+            for (const comment of feedback.comments) {
+              const postedComment = await github.postComment({
                 prDetails,
-                token: githubToken,
+                token: config.githubToken,
                 commitId,
                 file,
                 comment,
-              })
-            );
-            await Promise.all(commentPromises);
+              });
+              if (postedComment) {
+                postedComments.push(postedComment);
+              }
+            }
           }
         } catch (error) {
           console.error(`Failed to process file ${file.filename}:`, error);
+          reviewErrors.push(`- ${file.filename}: ${error.message}`);
         } finally {
           filesAnalyzed++;
-          ui.updateStatus(
-            `Analyzing files... (${filesAnalyzed}/${filesToReview.length})`
-          );
         }
-      })
+      }),
     );
 
     await Promise.all(reviewPromises);
 
-    ui.updateStatus("Review complete! Reloading...", false, true);
-    setTimeout(() => window.location.reload(), 2000);
+    if (reviewErrors.length > 0) {
+      const errorMessage = `Review complete with ${reviewErrors.length} error(s). See console for details.`;
+      ui.updateStatus(errorMessage, { isError: true });
+    } else {
+      ui.updateStatus(
+        `Review complete! ${postedComments.length} comments posted.`,
+        { isComplete: true },
+      );
+    }
   } catch (error) {
-    console.error("PR Review Flow Error:", error);
-    ui.updateStatus(`Error: ${error.message}`, true);
+    console.error(
+      "A critical error occurred during the PR Review Flow:",
+      error,
+    );
+    ui.updateStatus(`Error: ${error.message}`, { isError: true });
   }
 }

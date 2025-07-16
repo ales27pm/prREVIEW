@@ -5,18 +5,43 @@ const GITHUB_API_URL = "https://api.github.com";
  * @param {Response} res - The HTTP response from a GitHub API request.
  * @return {Object|null} The parsed JSON body, or null if the response has no content.
  */
-function handleStatus(res) {
+async function handleGitHubResponse(res) {
   if (res.status === 401) {
-    throw new Error("GitHub API: Authentication failed. Check your token.");
-  }
-  if (res.status === 403) {
-    throw new Error("GitHub API: Access forbidden or rate limited.");
-  }
-  if (!res.ok) {
-    throw new Error(`GitHub API: ${res.status} ${res.statusText}`);
+    throw new Error(
+      "GitHub API: Authentication failed. Please check your token in the options.",
+    );
   }
 
-  // Handle 204 No Content or other responses without body
+  if (res.status === 403) {
+    const rateLimitRemaining = res.headers.get("x-ratelimit-remaining");
+    if (rateLimitRemaining && parseInt(rateLimitRemaining, 10) === 0) {
+      const resetTime = new Date(
+        parseInt(res.headers.get("x-ratelimit-reset"), 10) * 1000,
+      );
+      throw new Error(
+        `GitHub API: Rate limit exceeded. Please wait until ${resetTime.toLocaleTimeString()}.`,
+      );
+    }
+    throw new Error(
+      "GitHub API: Access forbidden. Your token may lack the required permissions for this repository.",
+    );
+  }
+
+  if (res.status === 404) {
+    throw new Error(
+      "GitHub API: Resource not found. The repository or PR may not exist.",
+    );
+  }
+
+  if (!res.ok) {
+    const errorBody = await res
+      .text()
+      .catch(() => "Could not read error body.");
+    throw new Error(
+      `GitHub API Error: ${res.status} ${res.statusText}. Response: ${errorBody}`,
+    );
+  }
+
   if (res.status === 204 || res.headers.get("content-length") === "0") {
     return null;
   }
@@ -34,38 +59,46 @@ function handleStatus(res) {
  * @return {Promise<Array>} A promise that resolves to an array of file objects changed in the pull request.
  */
 export async function fetchAllPRFiles({ owner, repo, prNumber }, token) {
-  const files = [];
+  const allFiles = [];
   const perPage = 100;
   let page = 1;
   let keepFetching = true;
 
   while (keepFetching) {
-    const res = await fetch(
-      `${GITHUB_API_URL}/repos/${owner}/${repo}/pulls/${prNumber}/files?per_page=${perPage}&page=${page}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/vnd.github+json",
-        },
+    const url = `${GITHUB_API_URL}/repos/${owner}/${repo}/pulls/${prNumber}/files?per_page=${perPage}&page=${page}`;
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github.v3+json",
+      },
+    });
+    const files = await handleGitHubResponse(res);
+
+    if (files && Array.isArray(files)) {
+      allFiles.push(...files);
+      if (files.length < perPage) {
+        keepFetching = false;
+      } else {
+        page++;
       }
-    );
-    const data = await handleStatus(res);
-    files.push(...data);
-    if (data.length < perPage) {
-      keepFetching = false;
     } else {
-      page++;
+      keepFetching = false;
     }
   }
-  return files;
+  return allFiles;
 }
 
 export async function getPRData({ owner, repo, prNumber }, token) {
   const res = await fetch(
     `${GITHUB_API_URL}/repos/${owner}/${repo}/pulls/${prNumber}`,
-    { headers: { Authorization: `token ${token}` } }
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github.v3+json",
+      },
+    },
   );
-  return handleStatus(res);
+  return handleGitHubResponse(res);
 }
 
 export async function postComment({
@@ -81,8 +114,9 @@ export async function postComment({
     {
       method: "POST",
       headers: {
-        Authorization: `token ${token}`,
+        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
+        Accept: "application/vnd.github.v3+json",
       },
       body: JSON.stringify({
         body: comment.body,
@@ -91,7 +125,7 @@ export async function postComment({
         line: comment.line,
         side: "RIGHT",
       }),
-    }
+    },
   );
-  await handleStatus(res);
+  return handleGitHubResponse(res);
 }

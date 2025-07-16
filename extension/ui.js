@@ -37,7 +37,10 @@ export function createStatusIndicator() {
  * @param {boolean} [isError=false] - Whether the status represents an error.
  * @param {boolean} [isComplete=false] - Whether the operation is complete.
  */
-export function updateStatus(message, isError = false, isComplete = false) {
+export function updateStatus(
+  message,
+  { isError = false, isComplete = false } = {},
+) {
   if (!statusIndicator) createStatusIndicator();
   const statusText = document.getElementById("ai-review-status-text");
   const spinner = statusIndicator?.querySelector(".spinner");
@@ -46,10 +49,12 @@ export function updateStatus(message, isError = false, isComplete = false) {
     statusText.textContent = message;
   }
 
+  if (spinner) {
+    spinner.style.display = isError || isComplete ? "none" : "block";
+  }
+
   if (isError || isComplete) {
-    if (spinner) spinner.style.display = "none";
-  } else {
-    if (spinner) spinner.style.display = "block";
+    setTimeout(removeStatusIndicator, 5000);
   }
 }
 
