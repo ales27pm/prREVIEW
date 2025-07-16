@@ -111,7 +111,12 @@ export async function getPRData({ owner, repo, prNumber }, token) {
 }
 
 /**
- * Posts a review comment to a specific line of a file in a pull request.
+ * Posts a review comment on a specific line of a file in a pull request.
+ *
+ * @param {Object} prDetails - Contains the owner, repo, and pull request number.
+ * @param {string} commitId - The SHA of the commit to which the comment applies.
+ * @param {Object} file - The file object representing the file being commented on.
+ * @param {Object} comment - Contains the comment body and the line number.
  * @returns {Promise<Object|null>} The created comment object from the GitHub API, or null if the response is empty.
  */
 export async function postComment({
@@ -144,12 +149,15 @@ export async function postComment({
 }
 
 /**
- * Posts a summary comment to the pull request conversation.
- * @param {Object} params
- * @param {{owner:string, repo:string, prNumber:number}} params.prDetails
- * @param {string} params.token
- * @param {string} params.body
- * @returns {Promise<Object|null>} The created comment object or null.
+ * Posts a general comment to the conversation thread of a pull request.
+ *
+ * Sends a comment to the PR's issue comments endpoint, making it visible in the main discussion timeline.
+ *
+ * @param {Object} params - Parameters for posting the comment.
+ * @param {{owner: string, repo: string, prNumber: number}} params.prDetails - Identifies the pull request.
+ * @param {string} params.token - GitHub API authentication token.
+ * @param {string} params.body - The comment text to post.
+ * @returns {Promise<Object|null>} The created comment object, or null if the response is empty.
  */
 export async function postSummaryComment({ prDetails, token, body }) {
   const { owner, repo, prNumber } = prDetails;

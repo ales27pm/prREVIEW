@@ -29,6 +29,13 @@ const PERSONA_PROMPTS = {
  */
 import { loadSettings } from "./settings.js";
 
+/**
+ * Loads the application configuration from Chrome local storage, including API keys, model settings, prompt, concurrency limit, and reviewer persona.
+ *
+ * Returns an object containing the configuration values if successful, or an error message if required API keys are missing or settings cannot be loaded.
+ * The system prompt is selected based on the specified reviewer persona if it matches a predefined persona; otherwise, it falls back to a custom or default prompt.
+ * @returns {Promise<AppConfig|{error: string}>} The loaded configuration object or an error message.
+ */
 export async function loadConfig() {
   try {
     const settings = await loadSettings();
