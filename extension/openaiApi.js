@@ -1,5 +1,15 @@
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 
+/**
+ * Sends a code diff patch to the OpenAI API and returns structured code review comments.
+ *
+ * The function analyzes the provided patch using the OpenAI "gpt-4o" model, requesting feedback as a JSON object containing an array of comments. Each comment includes a line number and feedback body. If no issues are found or the response cannot be parsed, an empty comments array is returned.
+ *
+ * @param {string} patch - The unified diff patch to be reviewed.
+ * @param {string} apiKey - The OpenAI API key for authentication.
+ * @returns {Promise<Object>} A promise that resolves to a JSON object with a `comments` array containing code review feedback.
+ * @throws {Error} If authentication fails or the API response is not successful.
+ */
 export async function getReviewForPatch(patch, apiKey) {
   const response = await fetch(OPENAI_API_URL, {
     method: "POST",

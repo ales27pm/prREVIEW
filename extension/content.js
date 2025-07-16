@@ -12,6 +12,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   return true;
 });
 
+/**
+ * Orchestrates the AI-powered code review process for a pull request, including UI updates, token validation, file analysis with concurrency limits, and posting review comments.
+ * 
+ * Initiates the review by updating the UI, retrieves necessary API tokens, fetches pull request files and metadata, and analyzes each changed file using the OpenAI API. Posts AI-generated review comments to GitHub and updates the UI to reflect progress and completion. Handles errors gracefully, ensuring the review process continues for remaining files even if some fail.
+ * 
+ * @param {object} prDetails - Details of the pull request to review.
+ */
 async function runReviewFlow(prDetails) {
   ui.createStatusIndicator();
   ui.updateStatus("Starting AI review...");

@@ -1,5 +1,8 @@
 let statusIndicator;
 
+/**
+ * Injects the status indicator stylesheet into the document if it is not already present.
+ */
 function injectStyle() {
   if (document.getElementById("ai-review-style")) return;
   const link = document.createElement("link");
@@ -9,6 +12,11 @@ function injectStyle() {
   document.head.appendChild(link);
 }
 
+/**
+ * Creates and displays a status indicator overlay on the webpage if one does not already exist.
+ *
+ * The indicator includes a spinner, a status message, and a close button. Injects required styles if necessary.
+ */
 export function createStatusIndicator() {
   if (document.getElementById("ai-review-status-indicator")) return;
   injectStyle();
@@ -28,6 +36,15 @@ export function createStatusIndicator() {
   };
 }
 
+/**
+ * Updates the status indicator message and spinner visibility.
+ * 
+ * If the status indicator does not exist, it is created. The displayed message is updated, and the spinner is shown or hidden based on whether an error or completion state is indicated.
+ * 
+ * @param {string} message - The status message to display.
+ * @param {boolean} [isError=false] - Whether the status represents an error state.
+ * @param {boolean} [isComplete=false] - Whether the status represents a completed state.
+ */
 export function updateStatus(message, isError = false, isComplete = false) {
   if (!statusIndicator) createStatusIndicator();
   document.getElementById("ai-review-status-text").textContent = message;
@@ -39,6 +56,9 @@ export function updateStatus(message, isError = false, isComplete = false) {
   }
 }
 
+/**
+ * Removes the status indicator element from the page if it exists.
+ */
 export function removeStatusIndicator() {
   if (statusIndicator) {
     statusIndicator.remove();
