@@ -144,18 +144,26 @@ async function analyzeDiffWithOpenAI(patch, apiKey) {
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "gpt-3.5-turbo",
+        model: "gpt-4-turbo-preview", // or gpt-3.5-turbo-16k for better context
         messages: [
           {
+            role: "system",
+            content: "You are a helpful code reviewer. Analyze the code changes and provide constructive feedback on potential bugs, performance issues, security concerns, and code quality improvements. Be concise and specific."
+          },
+          {
             role: "user",
-            content: `Provide a short review for the following diff:\n${patch}`,
+            content: `Review this code diff and identify any issues or improvements:\n\n${patch}`,
           },
         ],
-        max_tokens: 150,
+        max_tokens: 500,
         temperature: 0.2,
       }),
     });
     if (!response.ok) {
+      const errorData = await response.json();
+      if (response.status === 429) {
+        throw new Error(`OpenAI rate limit exceeded: ${errorData.error?.message}`);
+      }
       throw new Error(`OpenAI request failed: ${response.status}`);
     }
     const data = await response.json();
