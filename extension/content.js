@@ -5,6 +5,8 @@ import * as openai from "./openaiApi.js";
 import { loadConfig } from "./config.js";
 import pLimit from "./p-limit.js";
 
+const MAX_COMMENT_LENGTH = 65000;
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "run_review") {
     runReviewFlow(request.prDetails);
@@ -55,7 +57,7 @@ async function runReviewFlow(prDetails) {
       concurrencyLimit > 20
     ) {
       console.warn(
-        `[AI Review] Invalid concurrencyLimit (${config.concurrencyLimit}), using default value of 5 (allowed range: 1-20).`
+        `[AI Review] Invalid concurrencyLimit (${config.concurrencyLimit}), using default value of 5 (allowed range: 1-20).`,
       );
       concurrencyLimit = 5;
     }
@@ -63,6 +65,7 @@ async function runReviewFlow(prDetails) {
     let filesAnalyzed = 0;
     const reviewErrors = [];
     const postedComments = [];
+    const summary = [];
 
     const reviewPromises = filesToReview.map((file) =>
       limit(async () => {
@@ -71,7 +74,11 @@ async function runReviewFlow(prDetails) {
             `Analyzing files... (${filesAnalyzed + 1}/${filesToReview.length})`,
           );
           const feedback = await openai.getReviewForPatch(file.patch, config);
-          if (feedback && feedback.comments && feedback.comments.length > 0) {
+          if (
+            feedback &&
+            Array.isArray(feedback.comments) &&
+            feedback.comments.length > 0
+          ) {
             for (const comment of feedback.comments) {
               const postedComment = await github.postComment({
                 prDetails,
@@ -84,6 +91,10 @@ async function runReviewFlow(prDetails) {
                 postedComments.push(postedComment);
               }
             }
+            const summaryLines = feedback.comments
+              .map((c) => `- Line ${c.line}: ${c.body}`)
+              .join("\n");
+            summary.push(`### ${file.filename}\n${summaryLines}`);
           }
         } catch (error) {
           console.error(`Failed to process file ${file.filename}:`, error);
@@ -95,6 +106,25 @@ async function runReviewFlow(prDetails) {
     );
 
     await Promise.all(reviewPromises);
+
+    if (summary.length > 0) {
+      let summaryBody = `${github.SUMMARY_HEADER}\n${summary.join("\n\n")}`;
+      const notice = "\n\n...summary truncated due to length";
+      if (summaryBody.length > MAX_COMMENT_LENGTH) {
+        summaryBody =
+          summaryBody.slice(0, MAX_COMMENT_LENGTH - notice.length) + notice;
+      }
+
+      try {
+        await github.postSummaryComment({
+          prDetails,
+          token: config.githubToken,
+          body: summaryBody,
+        });
+      } catch (error) {
+        console.error("Failed to post summary comment:", error);
+      }
+    }
 
     if (reviewErrors.length > 0) {
       const errorMessage = `Review complete with ${reviewErrors.length} error(s). See console for details.`;
