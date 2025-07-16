@@ -7,6 +7,12 @@ const statusElement = document.getElementById("form-status");
 
 let statusTimeout;
 
+/**
+ * Displays a temporary status message with a specified type on the options page.
+ * 
+ * @param {string} message - The message to display.
+ * @param {string} [type="success"] - The type of status message ("success" or "error"), which determines the CSS class.
+ */
 function showStatus(message, type = "success") {
   clearTimeout(statusTimeout);
   statusElement.textContent = message;
@@ -17,6 +23,10 @@ function showStatus(message, type = "success") {
   }, 4000);
 }
 
+/**
+ * Loads saved GitHub and OpenAI API credentials from browser storage and populates the input fields.
+ * Displays an error status message if loading fails.
+ */
 async function loadSettings() {
   try {
     const settings = await chrome.storage.local.get();
@@ -32,6 +42,10 @@ async function loadSettings() {
   }
 }
 
+/**
+ * Saves the GitHub token and OpenAI API key from input fields to browser storage.
+ * Displays a status message indicating success or failure. If either input is empty, shows an error and does not save.
+ */
 async function saveSettings() {
   const githubToken = githubTokenInput.value.trim();
   const openAIApiKey = openAIApiKeyInput.value.trim();

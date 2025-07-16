@@ -1,9 +1,9 @@
 const GITHUB_API_URL = "https://api.github.com";
 
 /**
- * Processes a GitHub API HTTP response, throwing errors for authentication, access, or other failures, and returns parsed JSON data or null for empty responses.
- * @param {Response} res - The HTTP response object from a GitHub API request.
- * @return {Object|null} The parsed JSON response body, or null if the response has no content.
+ * Handles a GitHub API HTTP response, throwing errors for authentication or access issues, and returns parsed JSON data or null if the response is empty.
+ * @param {Response} res - The HTTP response from a GitHub API request.
+ * @return {Object|null} The parsed JSON body, or null if the response has no content.
  */
 function handleStatus(res) {
   if (res.status === 401) {
@@ -25,14 +25,13 @@ function handleStatus(res) {
 }
 
 /**
- * Fetches all files changed in a specified GitHub pull request, requesting pages
- * of results until fewer than the maximum items are returned.
- * @param {Object} params - The pull request details.
+ * Retrieves all files changed in a GitHub pull request by paginating through the API until all results are collected.
+ * @param {Object} params - Details identifying the pull request.
  * @param {string} params.owner - The repository owner's username.
  * @param {string} params.repo - The repository name.
  * @param {number} params.prNumber - The pull request number.
  * @param {string} token - The GitHub API authentication token.
- * @return {Promise<Array>} An array of file objects representing the files changed in the pull request.
+ * @return {Promise<Array>} A promise that resolves to an array of file objects changed in the pull request.
  */
 export async function fetchAllPRFiles({ owner, repo, prNumber }, token) {
   const files = [];
