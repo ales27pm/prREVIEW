@@ -28,7 +28,12 @@ export async function fetchAllPRFiles({ owner, repo, prNumber }, token) {
   while (page <= maxPages) {
     const res = await fetch(
       `${GITHUB_API_URL}/repos/${owner}/${repo}/pulls/${prNumber}/files?per_page=${perPage}&page=${page}`,
-      { headers: { Authorization: `token ${token}` } }
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json'
+        }
+      }
     );
     const data = await handleStatus(res);
     files.push(...data);
