@@ -49,17 +49,31 @@ async function fetchAllPRFiles(owner, repo, prNumber, token) {
   const perPage = 100;
   let page = 1;
   const GITHUB_API_URL = "https://api.github.com";
-  while (true) {
+async function fetchAllPRFiles(owner, repo, prNumber, token) {
+  const files = [];
+  const perPage = 100;
+  let page = 1;
+  const maxPages = 50; // Safety limit
+  const GITHUB_API_URL = "https://api.github.com";
+  while (page <= maxPages) {
     const res = await fetch(
       `${GITHUB_API_URL}/repos/${owner}/${repo}/pulls/${prNumber}/files?per_page=${perPage}&page=${page}`,
       { headers: { Authorization: `token ${token}` } }
     );
-    if (!res.ok) break;
+    if (!res.ok) {
+      console.error(`Failed to fetch PR files: ${res.status} ${res.statusText}`);
+      break;
+    }
     const data = await res.json();
     files.push(...data);
     if (data.length < perPage) break;
     page += 1;
   }
+  if (page > maxPages) {
+    console.warn(`Reached maximum page limit (${maxPages}) while fetching PR files`);
+  }
+  return files;
+}
   return files;
 }
 
