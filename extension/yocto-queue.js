@@ -25,11 +25,3 @@ export default class Queue {
     yield* this.#items;
   }
 }
-  value;
-  next;
-
-  constructor(value) {
-    this.value = value;
-  }
-}
-
