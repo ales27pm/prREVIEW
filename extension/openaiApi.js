@@ -1,13 +1,13 @@
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 
 /**
- * Sends a code diff patch to the OpenAI API for automated code review and returns structured feedback.
+ * Submits a unified diff patch to the OpenAI API for automated code review and returns structured feedback.
  *
- * The function submits the provided patch to the OpenAI chat completions endpoint, requesting a JSON object containing an array of review comments. It performs strict validation of the API response and handles errors related to authentication, HTTP status, missing or malformed content, and unexpected response formats.
+ * Sends the provided patch to the OpenAI chat completions endpoint using the specified configuration, and returns an object containing an array of review comments. Handles authentication errors, invalid HTTP responses, and malformed or unexpected API responses. If the response does not contain valid comments, returns an empty array.
  *
  * @param {string} patch - The unified diff patch to be reviewed.
- * @param {object} config - Loaded configuration including API credentials.
- * @returns {Promise<{comments: Array<{line: number, body: string}>}>} An object containing an array of code review comments, or an empty array if no issues are found.
+ * @param {object} config - Configuration object with OpenAI API credentials, model, and system prompt.
+ * @returns {Promise<{comments: Array<{line: number, body: string}>}>} An object containing an array of code review comments, or an empty array if none are found.
  * @throws {Error} If authentication fails, the API response is invalid, or the returned JSON is malformed.
  */
 export async function getReviewForPatch(patch, config) {
