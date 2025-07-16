@@ -24,6 +24,7 @@ export function createStatusIndicator() {
 
   document.getElementById("ai-review-close-btn").onclick = () => {
     statusIndicator.remove();
+    statusIndicator = null;
   };
 }
 
