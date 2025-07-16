@@ -8,6 +8,9 @@ import {
 const saveButton = document.getElementById("save-settings");
 const githubTokenInput = document.getElementById("githubToken");
 const openAIApiKeyInput = document.getElementById("openAIApiKey");
+const openAIModelInput = document.getElementById("openAIModel");
+const maxTokensInput = document.getElementById("maxTokens");
+const temperatureInput = document.getElementById("temperature");
 const statusElement = document.getElementById("form-status");
 
 let statusTimeout;
@@ -41,6 +44,15 @@ async function displaySettings() {
     if (settings.openAIApiKey) {
       openAIApiKeyInput.value = settings.openAIApiKey;
     }
+    if (settings.openAIModel) {
+      openAIModelInput.value = settings.openAIModel;
+    }
+    if (settings.maxTokens) {
+      maxTokensInput.value = settings.maxTokens;
+    }
+    if (settings.temperature !== undefined) {
+      temperatureInput.value = settings.temperature;
+    }
   } catch (error) {
     console.error("Failed to load settings:", error);
     showStatus("Error loading settings.", "error");
@@ -54,14 +66,39 @@ async function displaySettings() {
 async function saveFormSettings() {
   const githubToken = githubTokenInput.value.trim();
   const openAIApiKey = openAIApiKeyInput.value.trim();
+  const openAIModel = openAIModelInput.value.trim();
+  const maxTokens = parseInt(maxTokensInput.value, 10);
+  const temperature = parseFloat(temperatureInput.value);
 
   if (!githubToken || !openAIApiKey) {
     showStatus("Both GitHub Token and OpenAI API Key are required.", "error");
     return;
   }
 
+  if (
+    maxTokensInput.value &&
+    (Number.isNaN(maxTokens) || maxTokens < 1 || maxTokens > 4000)
+  ) {
+    showStatus("Max Tokens must be a number between 1 and 4000.", "error");
+    return;
+  }
+
+  if (
+    temperatureInput.value &&
+    (Number.isNaN(temperature) || temperature < 0 || temperature > 2)
+  ) {
+    showStatus("Temperature must be between 0 and 2.", "error");
+    return;
+  }
+
   try {
-    await persistSettings({ githubToken, openAIApiKey });
+    await persistSettings({
+      githubToken,
+      openAIApiKey,
+      openAIModel,
+      maxTokens,
+      temperature,
+    });
     showStatus("Settings saved successfully!");
   } catch (error) {
     console.error("Failed to save settings:", error);

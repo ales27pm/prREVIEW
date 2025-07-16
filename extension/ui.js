@@ -54,6 +54,13 @@ export function updateStatus(
     spinner.style.display = isError || isComplete ? "none" : "block";
   }
 
+  statusIndicator.classList.remove("error", "success");
+  if (isError) {
+    statusIndicator.classList.add("error");
+  } else if (isComplete) {
+    statusIndicator.classList.add("success");
+  }
+
   if (isError || isComplete) {
     setTimeout(removeStatusIndicator, 5000);
   }

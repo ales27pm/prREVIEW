@@ -36,6 +36,8 @@ describe("getReviewForPatch", () => {
     const result = await getReviewForPatch("diff", {
       openAIApiKey: "test-key",
       openAIModel: "gpt",
+      maxTokens: 100,
+      temperature: 0.3,
       systemPrompt: "prompt",
     });
 
@@ -44,9 +46,13 @@ describe("getReviewForPatch", () => {
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({ Authorization: "Bearer test-key" }),
-        body: expect.stringContaining("diff"),
+        body: expect.any(String),
       }),
     );
+    const body = fetchMock.mock.calls[0][1].body;
+    expect(body).toContain('"max_tokens":100');
+    expect(body).toContain('"temperature":0.3');
+    expect(body).toContain("diff");
     expect(result).toEqual({ comments: [{ line: 1, body: "hi" }] });
   });
 
