@@ -20,6 +20,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 });
 
+const openaiStatus = document.getElementById("openai-status");
+
+let githubStatusTimeout;
+let openaiStatusTimeout;
+
 saveButton.addEventListener("click", () => {
   const githubToken = githubTokenInput.value;
   const openAIApiKey = openAIApiKeyInput.value;
@@ -37,13 +42,19 @@ saveButton.addEventListener("click", () => {
   }
 
   chrome.storage.local.set({ githubToken, openAIApiKey }, () => {
+    // Clear any existing timeouts
+    clearTimeout(githubStatusTimeout);
+    clearTimeout(openaiStatusTimeout);
+    
     githubStatus.textContent = "GitHub Token Saved!";
     githubStatus.className = "status success";
     openaiStatus.textContent = "OpenAI Key Saved!";
     openaiStatus.className = "status success";
 
-    setTimeout(() => {
+    githubStatusTimeout = setTimeout(() => {
       githubStatus.textContent = "";
+    }, 3000);
+    openaiStatusTimeout = setTimeout(() => {
       openaiStatus.textContent = "";
     }, 3000);
   });
