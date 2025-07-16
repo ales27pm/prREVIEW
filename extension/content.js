@@ -13,6 +13,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   return true;
 });
 
+/**
+ * Runs the AI-powered code review flow for a given GitHub pull request.
+ *
+ * Orchestrates the process of loading configuration, fetching PR data, filtering files, generating AI review feedback, posting comments, and updating the UI with progress and results. Handles errors at each stage and provides user feedback through the UI.
+ * @param {object} prDetails - Details of the pull request to review.
+ */
 async function runReviewFlow(prDetails) {
   ui.createStatusIndicator();
   ui.updateStatus("Initializing AI review...");
