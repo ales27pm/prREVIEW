@@ -3,16 +3,55 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>GitHub Token Settings</title>
+    <title>PR Review Assistant Settings</title>
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      body {
+        width: 400px;
+        text-align: left;
+        padding: 20px;
+      }
+      h2 {
+        text-align: center;
+      }
+      input {
+        width: 100%;
+        padding: 8px;
+        margin-bottom: 10px;
+        box-sizing: border-box;
+      }
+      .token-group {
+        margin-bottom: 20px;
+      }
+      .status {
+        min-height: 20px;
+        font-weight: bold;
+      }
+      .status.error {
+        color: #d9534f;
+      }
+      .status.success {
+        color: #5cb85c;
+      }
+    </style>
   </head>
   <body>
-    <h2>GitHub Token</h2>
-    <input
-      type="password"
-      id="githubToken"
-      placeholder="Enter your GitHub token"
-    />
-    <button id="saveToken">Save</button>
-    <script src="options.js"></script>
+    <h2>PR Review Assistant Settings</h2>
+
+    <div class="token-group">
+      <label for="githubToken">GitHub Token</label>
+      <input type="password" id="githubToken" placeholder="ghp_..." />
+      <div id="github-status" class="status"></div>
+    </div>
+
+    <div class="token-group">
+      <label for="openAIApiKey">OpenAI API Key</label>
+      <input type="password" id="openAIApiKey" placeholder="sk-..." />
+      <div id="openai-status" class="status"></div>
+    </div>
+
+    <button id="save-settings">Save Settings</button>
+
+    <script src="options.js" type="module"></script>
   </body>
 </html>
