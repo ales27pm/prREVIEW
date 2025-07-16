@@ -1,5 +1,10 @@
 const GITHUB_API_URL = "https://api.github.com";
 
+/**
+ * Processes a GitHub API HTTP response, throwing errors for authentication, access, or other failures, and returns parsed JSON data or null for empty responses.
+ * @param {Response} res - The HTTP response object from a GitHub API request.
+ * @return {Object|null} The parsed JSON response body, or null if the response has no content.
+ */
 function handleStatus(res) {
   if (res.status === 401) {
     throw new Error("GitHub API: Authentication failed. Check your token.");
@@ -19,6 +24,15 @@ function handleStatus(res) {
   return res.json();
 }
 
+/**
+ * Fetches all files changed in a specified GitHub pull request, handling pagination up to a maximum of 50 pages.
+ * @param {Object} params - The pull request details.
+ * @param {string} params.owner - The repository owner's username.
+ * @param {string} params.repo - The repository name.
+ * @param {number} params.prNumber - The pull request number.
+ * @param {string} token - The GitHub API authentication token.
+ * @return {Promise<Array>} An array of file objects representing the files changed in the pull request.
+ */
 export async function fetchAllPRFiles({ owner, repo, prNumber }, token) {
   const files = [];
   const perPage = 100;
