@@ -25,7 +25,8 @@ function handleStatus(res) {
 }
 
 /**
- * Fetches all files changed in a specified GitHub pull request, handling pagination up to a maximum of 50 pages.
+ * Fetches all files changed in a specified GitHub pull request, requesting pages
+ * of results until fewer than the maximum items are returned.
  * @param {Object} params - The pull request details.
  * @param {string} params.owner - The repository owner's username.
  * @param {string} params.repo - The repository name.
@@ -37,9 +38,9 @@ export async function fetchAllPRFiles({ owner, repo, prNumber }, token) {
   const files = [];
   const perPage = 100;
   let page = 1;
-  const maxPages = 50;
+  let keepFetching = true;
 
-  while (page <= maxPages) {
+  while (keepFetching) {
     const res = await fetch(
       `${GITHUB_API_URL}/repos/${owner}/${repo}/pulls/${prNumber}/files?per_page=${perPage}&page=${page}`,
       {
@@ -51,14 +52,11 @@ export async function fetchAllPRFiles({ owner, repo, prNumber }, token) {
     );
     const data = await handleStatus(res);
     files.push(...data);
-    if (data.length < perPage) break;
-    page++;
-  }
-
-  if (page > maxPages) {
-    console.warn(
-      `Reached maximum page limit (${maxPages}) while fetching PR files`
-    );
+    if (data.length < perPage) {
+      keepFetching = false;
+    } else {
+      page++;
+    }
   }
   return files;
 }

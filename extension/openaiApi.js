@@ -31,10 +31,25 @@ export async function getReviewForPatch(patch, apiKey) {
   }
 
   const aiResponse = await response.json();
+
+  if (!aiResponse.choices || aiResponse.choices.length === 0) {
+    throw new Error("OpenAI API returned no choices in the response.");
+  }
+
+  const message = aiResponse.choices[0].message?.content;
+  if (!message) {
+    throw new Error("OpenAI API response did not include message content.");
+  }
+
   try {
-    return JSON.parse(aiResponse.choices[0].message.content);
+    const parsed = JSON.parse(message);
+    if (!parsed || !Array.isArray(parsed.comments)) {
+      console.error("AI response is not in expected format:", parsed);
+      return { comments: [] };
+    }
+    return parsed;
   } catch (error) {
-    console.error("Failed to parse AI response:", error);
-    return { comments: [] };
+    console.error("Failed to parse AI response:", message, error);
+    throw new Error("AI returned malformed JSON in its response.");
   }
 }
