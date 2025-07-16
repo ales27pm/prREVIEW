@@ -215,7 +215,8 @@ function extractChangesFromDiff(diffData) {
             change: line.slice(1).trim(),
           });
           current++;
-        } else {
+        } else if (!line.startsWith("-")) {
+          // Only increment for context lines (starting with space)
           current++;
         }
       }
