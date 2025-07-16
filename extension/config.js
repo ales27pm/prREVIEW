@@ -51,9 +51,22 @@ export async function loadConfig() {
           : DEFAULT_TEMPERATURE,
       systemPrompt:
         settings.systemPrompt ||
-        PERSONA_PROMPTS[settings.reviewPersona] ||
+        (settings.reviewPersona &&
+        Object.prototype.hasOwnProperty.call(
+          PERSONA_PROMPTS,
+          settings.reviewPersona,
+        )
+          ? PERSONA_PROMPTS[settings.reviewPersona]
+          : null) ||
         DEFAULT_PROMPT,
-      reviewPersona: settings.reviewPersona || "",
+      reviewPersona:
+        settings.reviewPersona &&
+        Object.prototype.hasOwnProperty.call(
+          PERSONA_PROMPTS,
+          settings.reviewPersona,
+        )
+          ? settings.reviewPersona
+          : "",
       concurrencyLimit: settings.concurrencyLimit || 5,
       error: null,
     };
