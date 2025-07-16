@@ -9,7 +9,10 @@ document.getElementById("run-review").addEventListener("click", () => {
     { action: "trigger_review_from_popup" },
     (response) => {
       if (chrome.runtime.lastError) {
-        console.error("Failed to trigger review:", chrome.runtime.lastError.message);
+        console.error(
+          "Failed to trigger review:",
+          chrome.runtime.lastError.message
+        );
       }
       window.close();
     }

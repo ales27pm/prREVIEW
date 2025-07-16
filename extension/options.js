@@ -45,7 +45,7 @@ saveButton.addEventListener("click", () => {
     // Clear any existing timeouts
     clearTimeout(githubStatusTimeout);
     clearTimeout(openaiStatusTimeout);
-    
+
     githubStatus.textContent = "GitHub Token Saved!";
     githubStatus.className = "status success";
     openaiStatus.textContent = "OpenAI Key Saved!";

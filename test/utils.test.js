@@ -1,9 +1,4 @@
-let extractPRDetails;
-
-beforeAll(async () => {
-  const url = new URL("../extension/utils.js", import.meta.url);
-  ({ extractPRDetails } = await import(url.href));
-});
+import { extractPRDetails } from "../extension/utils.js";
 
 describe("extractPRDetails", () => {
   test("should extract details from a valid GitHub PR URL", () => {
