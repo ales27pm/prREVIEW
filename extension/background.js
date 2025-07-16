@@ -1,4 +1,7 @@
-// Background service worker for PR Review Assistant
-chrome.runtime.onInstalled.addListener(() => {
-  console.log("PR Review Assistant installed");
+// extension/background.js
+
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details.reason === "install") {
+    chrome.runtime.openOptionsPage();
+  }
 });
