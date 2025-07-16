@@ -10,14 +10,11 @@ const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
  * @returns {Promise<{comments: Array<{line: number, body: string}>}>} An object containing an array of code review comments, or an empty array if none are found.
  * @throws {Error} If authentication fails, the API response is invalid, or the returned JSON is malformed.
  */
-async function getStoredApiKey() {
-  const result = await chrome.storage.sync.get("openAIApiKey");
-  return result.openAIApiKey || null;
-}
+import { loadSettings } from "./settings.js";
 
 export async function getReviewForPatch(patch, config = {}) {
-  const storedKey = await getStoredApiKey();
-  const openAIApiKey = config.openAIApiKey || storedKey;
+  const settings = await loadSettings();
+  const openAIApiKey = config.openAIApiKey || settings.openAIApiKey;
   const { openAIModel, systemPrompt } = config;
 
   if (!openAIApiKey) {

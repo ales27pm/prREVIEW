@@ -1,5 +1,10 @@
 // extension/options.js
 
+import {
+  loadSettings as getStoredSettings,
+  saveSettings as persistSettings,
+} from "./settings.js";
+
 const saveButton = document.getElementById("save-settings");
 const githubTokenInput = document.getElementById("githubToken");
 const openAIApiKeyInput = document.getElementById("openAIApiKey");
@@ -27,9 +32,9 @@ function showStatus(message, type = "success") {
  * Loads saved GitHub and OpenAI API credentials from browser storage and populates the input fields.
  * Displays an error status message if loading fails.
  */
-async function loadSettings() {
+async function displaySettings() {
   try {
-    const settings = await chrome.storage.sync.get();
+    const settings = await getStoredSettings();
     if (settings.githubToken) {
       githubTokenInput.value = settings.githubToken;
     }
@@ -46,7 +51,7 @@ async function loadSettings() {
  * Saves the GitHub token and OpenAI API key from input fields to browser storage.
  * Displays a status message indicating success or failure. If either input is empty, shows an error and does not save.
  */
-async function saveSettings() {
+async function saveFormSettings() {
   const githubToken = githubTokenInput.value.trim();
   const openAIApiKey = openAIApiKeyInput.value.trim();
 
@@ -56,7 +61,7 @@ async function saveSettings() {
   }
 
   try {
-    await chrome.storage.sync.set({ githubToken, openAIApiKey });
+    await persistSettings({ githubToken, openAIApiKey });
     showStatus("Settings saved successfully!");
   } catch (error) {
     console.error("Failed to save settings:", error);
@@ -64,5 +69,5 @@ async function saveSettings() {
   }
 }
 
-document.addEventListener("DOMContentLoaded", loadSettings);
-saveButton.addEventListener("click", saveSettings);
+document.addEventListener("DOMContentLoaded", displaySettings);
+saveButton.addEventListener("click", saveFormSettings);

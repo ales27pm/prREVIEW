@@ -15,9 +15,11 @@ const DEFAULT_PROMPT = `You are an expert code reviewer. Your task is to analyze
  * Retrieves the application configuration from Chrome local storage, applying default values for optional settings and validating the presence of required API keys.
  * @returns {Promise<AppConfig>} Resolves to the configuration object, or an error message if required keys are missing or loading fails.
  */
+import { loadSettings } from "./settings.js";
+
 export async function loadConfig() {
   try {
-    const settings = await chrome.storage.sync.get();
+    const settings = await loadSettings();
 
     if (!settings.githubToken || !settings.openAIApiKey) {
       return {
