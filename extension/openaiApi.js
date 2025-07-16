@@ -10,8 +10,18 @@ const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
  * @returns {Promise<{comments: Array<{line: number, body: string}>}>} An object containing an array of code review comments, or an empty array if none are found.
  * @throws {Error} If authentication fails, the API response is invalid, or the returned JSON is malformed.
  */
-export async function getReviewForPatch(patch, config) {
-  const { openAIApiKey, openAIModel, systemPrompt } = config;
+import { loadSettings } from "./settings.js";
+
+export async function getReviewForPatch(patch, config = {}) {
+  const settings = await loadSettings();
+  const openAIApiKey = config.openAIApiKey || settings.openAIApiKey;
+  const { openAIModel, systemPrompt } = config;
+
+  if (!openAIApiKey) {
+    throw new Error(
+      "OpenAI API key not found. Please add it in the options page.",
+    );
+  }
 
   const response = await fetch(OPENAI_API_URL, {
     method: "POST",
