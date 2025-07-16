@@ -184,9 +184,13 @@ async function postPRComment(token, pr, comment, line, file, commitId) {
       },
       body: JSON.stringify(body),
     });
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(`Failed to post comment: ${response.status} - ${errorData.message || 'Unknown error'}`);
+    }
     const data = await response.json();
     if (!data.id) {
-      console.error("Failed to post comment", data);
+      throw new Error(`Invalid response from GitHub: ${JSON.stringify(data)}`);
     }
   } catch (err) {
     console.error("Error posting PR comment", err);
