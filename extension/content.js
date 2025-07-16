@@ -41,7 +41,19 @@ async function runReviewFlow(prDetails) {
       return;
     }
 
-    const limit = pLimit(config.concurrencyLimit);
+    // Validate concurrencyLimit to be a positive integer between 1 and 20
+    let concurrencyLimit = parseInt(config.concurrencyLimit, 10);
+    if (
+      isNaN(concurrencyLimit) ||
+      concurrencyLimit < 1 ||
+      concurrencyLimit > 20
+    ) {
+      console.warn(
+        `[AI Review] Invalid concurrencyLimit (${config.concurrencyLimit}), using default value of 5 (allowed range: 1-20).`
+      );
+      concurrencyLimit = 5;
+    }
+    const limit = pLimit(concurrencyLimit);
     let filesAnalyzed = 0;
     const reviewErrors = [];
     const postedComments = [];
