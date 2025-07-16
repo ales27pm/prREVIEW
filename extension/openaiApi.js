@@ -1,4 +1,12 @@
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
+const MAX_METADATA_LENGTH = 200;
+
+function truncateText(text, maxLength = MAX_METADATA_LENGTH) {
+  const trimmed = (text || "").trim();
+  return trimmed.length > maxLength
+    ? `${trimmed.slice(0, maxLength - 1)}…`
+    : trimmed;
+}
 
 /**
  * Submits a unified diff patch to the OpenAI API for automated code review and returns structured feedback.
@@ -24,6 +32,13 @@ export async function getReviewForPatch(patch, config = {}) {
     prBody = "",
   } = config;
 
+  const title = truncateText(prTitle);
+  const body = truncateText(prBody);
+  let prContext = "";
+  if (title) prContext += `Pull request title: ${title}\n`;
+  if (body) prContext += `Pull request description: ${body}\n`;
+  if (prContext) prContext += "\n";
+
   if (!openAIApiKey) {
     throw new Error(
       "OpenAI API key not found. Please add it in the options page.",
@@ -44,7 +59,7 @@ export async function getReviewForPatch(patch, config = {}) {
         { role: "system", content: systemPrompt },
         {
           role: "user",
-          content: `Pull request title: ${prTitle}\nPull request description: ${prBody}\n\nAnalyze the following diff step by step. Provide a short summary of your reasoning and inline comments. Return a JSON object with \"reasoning\" and \"comments\" as described.\n\n${patch}`,
+          content: `${prContext}Analyze the following diff step by step. Provide a short summary of your reasoning and inline comments. Return a JSON object with \"reasoning\" and \"comments\" as described.\n\n${patch}`,
         },
       ],
       response_format: { type: "json_object" },
