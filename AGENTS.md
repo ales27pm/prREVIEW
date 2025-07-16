@@ -9,5 +9,5 @@ This repository contains a Chrome extension that provides AI-powered pull reques
 - Run `npm test` before committing.
 
 ## Testing
-- `npm test` currently just runs Prettier in check mode to ensure formatting.
+- `npm test` runs a two-stage process. First, it runs Prettier in check mode to ensure all code is correctly formatted. If that passes, it executes the Jest test suite.
 - Future tests may be added under `test/`.

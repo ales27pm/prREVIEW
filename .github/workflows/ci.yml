@@ -1,4 +1,4 @@
-name: NodeJS with Grunt
+name: NodeJS CI
 
 on:
   push:
@@ -22,7 +22,7 @@ jobs:
       with:
         node-version: ${{ matrix.node-version }}
 
-    - name: Build
+    - name: Install Dependencies and Run Tests
       run: |
         npm install
-        grunt
+        npm test
