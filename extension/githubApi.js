@@ -10,6 +10,12 @@ function handleStatus(res) {
   if (!res.ok) {
     throw new Error(`GitHub API: ${res.status} ${res.statusText}`);
   }
+  
+  // Handle 204 No Content or other responses without body
+  if (res.status === 204 || res.headers.get('content-length') === '0') {
+    return null;
+  }
+  
   return res.json();
 }
 
