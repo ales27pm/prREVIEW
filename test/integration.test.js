@@ -1,4 +1,5 @@
 import { jest } from "@jest/globals";
+import { setupChrome, resetChrome } from "./chromeMock.js";
 
 // Mock modules used by content.js
 jest.unstable_mockModule("../extension/openaiApi.js", () => ({
@@ -29,43 +30,8 @@ jest.unstable_mockModule("../extension/ui.js", () => ({
   removeStatusIndicator: jest.fn(),
 }));
 
-let backgroundListeners = [];
-let contentListeners = [];
-
-function setupChrome() {
-  global.chrome = {
-    runtime: {
-      onInstalled: { addListener: jest.fn() },
-      sendMessage: jest.fn((msg, cb) => {
-        backgroundListeners.forEach((l) => l(msg, {}, cb));
-      }),
-      onMessage: {
-        addListener: jest.fn((fn) => {
-          if (global.__loadingContent) {
-            contentListeners.push(fn);
-          } else {
-            backgroundListeners.push(fn);
-          }
-        }),
-      },
-    },
-    tabs: {
-      query: jest.fn((q, cb) =>
-        cb([{ id: 1, url: "https://github.com/a/b/pull/1" }]),
-      ),
-      sendMessage: jest.fn((id, msg, cb) => {
-        contentListeners.forEach((l) => l(msg, {}, cb));
-      }),
-    },
-    contextMenus: { create: jest.fn(), onClicked: { addListener: jest.fn() } },
-    action: { onClicked: { addListener: jest.fn() } },
-  };
-}
-
 beforeEach(() => {
-  backgroundListeners = [];
-  contentListeners = [];
-  setupChrome();
+  resetChrome();
   jest.resetModules();
 });
 
@@ -74,7 +40,7 @@ test("popup click triggers OpenAI call", async () => {
   await import("../extension/background.js");
   global.__loadingContent = true;
   await import("../extension/content.js");
-  delete global.__loadingContent;
+  global.__loadingContent = undefined;
 
   document.body.innerHTML =
     '<button id="run-review"></button><button id="open-settings"></button>';
