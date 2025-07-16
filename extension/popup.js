@@ -1,42 +1,88 @@
-document.getElementById("run-review").addEventListener("click", async () => {
-  chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
-    const tab = tabs[0];
-    const pr = extractPRDetails(tab.url);
-    if (!pr) {
-      alert("Not a GitHub PR page");
-      return;
+// extension/popup.js
+
+if (typeof document !== "undefined" && typeof chrome !== "undefined") {
+  const reviewButton = document.getElementById("run-review");
+  if (reviewButton) {
+    reviewButton.addEventListener("click", async () => {
+      reviewButton.disabled = true;
+      reviewButton.textContent = "Running...";
+      try {
+        await runReview();
+      } finally {
+        reviewButton.disabled = false;
+        reviewButton.textContent = "Run Review";
+      }
+    });
+  }
+
+  const settingsButton = document.getElementById("open-settings");
+  if (settingsButton) {
+    settingsButton.addEventListener("click", () => {
+      chrome.runtime.openOptionsPage();
+    });
+  }
+}
+
+async function runReview() {
+  const tab = await getActiveTab();
+  const prDetails = extractPRDetails(tab.url);
+  if (!prDetails) {
+    alert("Not a valid GitHub PR page!");
+    return;
+  }
+
+  const githubToken = await getGithubToken();
+  if (!githubToken) {
+    alert("GitHub token not found. Please set it in the extension settings.");
+    chrome.runtime.openOptionsPage();
+    return;
+  }
+
+  try {
+    const diffs = await fetchPRDiffs(prDetails, githubToken);
+    if (diffs.length === 0) return;
+
+    const commitId = await getPRCommitId(prDetails, githubToken);
+
+    for (const file of diffs) {
+      const suggestions = await analyzeDiffWithOpenAI(file.patch);
+      if (!suggestions) continue;
+
+      const changes = extractChangesFromDiff([file]);
+      if (changes.length > 0) {
+        const firstChange = changes[0];
+        await postPRComment(
+          githubToken,
+          prDetails,
+          suggestions,
+          firstChange.line,
+          firstChange.file,
+          commitId
+        );
+      }
     }
-    chrome.storage.local.get(["githubToken"], async (result) => {
-      if (!result.githubToken) {
-        alert("GitHub token not found. Set it in settings.");
-        return;
-      }
-      const diffs = await fetchPRDiffs(pr, result.githubToken);
-      console.log("Diffs:", diffs);
-      const commitId = await getPRCommitId(pr, result.githubToken);
-      for (const file of diffs) {
-        const suggestions = await analyzeDiffWithOpenAI(file.patch);
-        const changes = extractChangesFromDiff([file]);
-        if (changes.length > 0) {
-          const change = changes[0];
-          await postPRComment(
-            result.githubToken,
-            pr,
-            suggestions,
-            change.line,
-            change.file,
-            commitId
-          );
-        }
-      }
-      chrome.tabs.reload();
+    chrome.tabs.reload();
+  } catch (error) {
+    console.error("An error occurred during the review process:", error);
+    alert("An error occurred. Check the browser console for more details.");
+  }
+}
+
+function getActiveTab() {
+  return new Promise((resolve) => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      resolve(tabs[0]);
     });
   });
-});
+}
 
-document.getElementById("open-settings").addEventListener("click", () => {
-  chrome.runtime.openOptionsPage();
-});
+function getGithubToken() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(["githubToken"], (result) => {
+      resolve(result.githubToken);
+    });
+  });
+}
 
 function extractPRDetails(url) {
   const match = url.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
@@ -44,38 +90,73 @@ function extractPRDetails(url) {
   return { owner: match[1], repo: match[2], prNumber: match[3] };
 }
 
-async function fetchPRDiffs({ owner, repo, prNumber }, token) {
+async function fetchPRDiffs({ owner, repo, prNumber }, githubToken) {
   const url = `https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}/files`;
   const response = await fetch(url, {
     headers: {
-      Authorization: `token ${token}`,
+      Authorization: `Bearer ${githubToken}`,
       Accept: "application/vnd.github.v3+json",
     },
   });
   if (!response.ok) {
     console.error("Failed to fetch PR diffs:", response.status);
+    alert(`Failed to fetch PR diffs. Status: ${response.status}`);
     return [];
   }
   const files = await response.json();
-  return files.map((f) => ({ filename: f.filename, patch: f.patch }));
+  return files.map((file) => ({
+    filename: file.filename,
+    patch: file.patch,
+  }));
 }
 
-async function getPRCommitId(pr, token) {
-  const url = `https://api.github.com/repos/${pr.owner}/${pr.repo}/pulls/${pr.prNumber}`;
+async function getPRCommitId(prDetails, githubToken) {
+  const url = `https://api.github.com/repos/${prDetails.owner}/${prDetails.repo}/pulls/${prDetails.prNumber}`;
   const response = await fetch(url, {
-    headers: { Authorization: `token ${token}` },
+    headers: { Authorization: `Bearer ${githubToken}` },
   });
-  const data = await response.json();
-  return data.head.sha;
+  const prData = await response.json();
+  return prData.head.sha;
 }
 
 async function analyzeDiffWithOpenAI(patch) {
-  // Placeholder: replace with actual OpenAI API call
-  return `Review suggestions for patch:\n${patch.slice(0, 100)}...`;
+  console.log("Analyzing patch with AI...");
+  if (patch) {
+    return "This is a placeholder AI suggestion. Consider improving variable names and adding comments for clarity.";
+  }
+  return null;
 }
 
-async function postPRComment(token, pr, comment, line, file, commitId) {
-  const url = `https://api.github.com/repos/${pr.owner}/${pr.repo}/pulls/${pr.prNumber}/comments`;
+function extractChangesFromDiff(diffData) {
+  const changes = [];
+  diffData.forEach((file) => {
+    if (!file.patch) return;
+    const lines = file.patch.split("\n");
+    let currentLine = 0;
+    lines.forEach((line) => {
+      if (line.startsWith("@@")) {
+        const match = line.match(/@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+        if (match) currentLine = parseInt(match[1], 10);
+      } else if (line.startsWith("+") && !line.startsWith("+++")) {
+        changes.push({ file: file.filename, line: currentLine });
+        currentLine++;
+      } else if (!line.startsWith("-")) {
+        currentLine++;
+      }
+    });
+  });
+  return changes;
+}
+
+async function postPRComment(
+  githubToken,
+  prDetails,
+  comment,
+  line,
+  file,
+  commitId
+) {
+  const url = `https://api.github.com/repos/${prDetails.owner}/${prDetails.repo}/pulls/${prDetails.prNumber}/comments`;
   const body = {
     body: comment,
     path: file,
@@ -86,39 +167,18 @@ async function postPRComment(token, pr, comment, line, file, commitId) {
   const response = await fetch(url, {
     method: "POST",
     headers: {
-      Authorization: `token ${token}`,
+      Authorization: `Bearer ${githubToken}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
   });
-  const data = await response.json();
-  if (!data.id) {
-    console.error("Failed to post comment", data);
+  if (!response.ok) {
+    console.error("Failed to post comment:", await response.json());
+    alert(`Failed to post comment on ${file}.`);
   }
 }
 
-function extractChangesFromDiff(diffData) {
-  const changes = [];
-  diffData.forEach((file) => {
-    const lines = file.patch.split("\n");
-    let current = 0;
-    lines.forEach((line) => {
-      if (line.startsWith("@@")) {
-        const m = line.match(/@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
-        if (m) current = parseInt(m[1]);
-      } else if (!line.startsWith("+++") && !line.startsWith("---")) {
-        if (line.startsWith("+")) {
-          changes.push({
-            file: file.filename,
-            line: current,
-            change: line.slice(1).trim(),
-          });
-          current++;
-        } else {
-          current++;
-        }
-      }
-    });
-  });
-  return changes;
+// Export for testing in Node environment
+if (typeof module !== "undefined") {
+  module.exports = { extractChangesFromDiff };
 }
