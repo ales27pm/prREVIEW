@@ -1,83 +1,9 @@
 // extension/content.js
+import * as ui from "./ui.js";
+import * as github from "./githubApi.js";
+import * as openai from "./openaiApi.js";
+import pLimit from "./p-limit.js";
 
-// --- UI Management ---
-let statusIndicator;
-
-function injectStyle() {
-  if (document.getElementById("ai-review-style")) return;
-  const link = document.createElement("link");
-  link.id = "ai-review-style";
-  link.rel = "stylesheet";
-  link.href = chrome.runtime.getURL("status.css");
-  document.head.appendChild(link);
-}
-
-function createStatusIndicator() {
-  if (document.getElementById("ai-review-status-indicator")) return;
-
-  injectStyle();
-
-  statusIndicator = document.createElement("div");
-  statusIndicator.id = "ai-review-status-indicator";
-  statusIndicator.innerHTML = `
-    <div class="spinner"></div>
-    <p id="ai-review-status-text">Initializing...</p>
-    <button id="ai-review-close-btn">×</button>
-  `;
-  document.body.appendChild(statusIndicator);
-
-  document.getElementById("ai-review-close-btn").onclick = () => {
-    statusIndicator.remove();
-  };
-
-  // Styles are injected from status.css
-}
-
-function updateStatus(message, isError = false, isComplete = false) {
-  if (!statusIndicator) createStatusIndicator();
-  document.getElementById("ai-review-status-text").textContent = message;
-  const spinner = statusIndicator.querySelector(".spinner");
-  if (isError || isComplete) {
-    spinner.style.display = "none";
-  } else {
-    spinner.style.display = "block";
-  }
-}
-
-async function fetchAllPRFiles(owner, repo, prNumber, token) {
-  const files = [];
-  const perPage = 100;
-  let page = 1;
-  const GITHUB_API_URL = "https://api.github.com";
-async function fetchAllPRFiles(owner, repo, prNumber, token) {
-  const files = [];
-  const perPage = 100;
-  let page = 1;
-  const maxPages = 50; // Safety limit
-  const GITHUB_API_URL = "https://api.github.com";
-  while (page <= maxPages) {
-    const res = await fetch(
-      `${GITHUB_API_URL}/repos/${owner}/${repo}/pulls/${prNumber}/files?per_page=${perPage}&page=${page}`,
-      { headers: { Authorization: `token ${token}` } }
-    );
-    if (!res.ok) {
-      console.error(`Failed to fetch PR files: ${res.status} ${res.statusText}`);
-      break;
-    }
-    const data = await res.json();
-    files.push(...data);
-    if (data.length < perPage) break;
-    page += 1;
-  }
-  if (page > maxPages) {
-    console.warn(`Reached maximum page limit (${maxPages}) while fetching PR files`);
-  }
-  return files;
-}
-  return files;
-}
-
-// --- Main Logic ---
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "run_review") {
     runReviewFlow(request.prDetails);
@@ -87,110 +13,81 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 async function runReviewFlow(prDetails) {
-  updateStatus("Starting AI review...");
+  ui.createStatusIndicator();
+  ui.updateStatus("Starting AI review...");
 
   try {
     const { githubToken, openAIApiKey } = await chrome.storage.local.get([
       "githubToken",
       "openAIApiKey",
     ]);
-    if (!githubToken || !openAIApiKey) {
-      updateStatus(
-        "API keys not set. Please configure them in the extension options.",
+
+    if (!githubToken) {
+      ui.updateStatus(
+        "GitHub Token is missing. Please configure it in the extension options.",
+        true
+      );
+      return;
+    }
+    if (!openAIApiKey) {
+      ui.updateStatus(
+        "OpenAI API Key is missing. Please configure it in the extension options.",
         true
       );
       return;
     }
 
-    updateStatus("Fetching PR data...");
-    const { owner, repo, prNumber } = prDetails;
-    const GITHUB_API_URL = "https://api.github.com";
-
-    const files = await fetchAllPRFiles(owner, repo, prNumber, githubToken);
-    const prData = await (
-      await fetch(
-        `${GITHUB_API_URL}/repos/${owner}/${repo}/pulls/${prNumber}`,
-        {
-          headers: { Authorization: `token ${githubToken}` },
-        }
-      )
-    ).json();
+    ui.updateStatus("Fetching PR data...");
+    const files = await github.fetchAllPRFiles(prDetails, githubToken);
+    const prData = await github.getPRData(prDetails, githubToken);
     const commitId = prData.head.sha;
 
-    const filesToReview = files.filter((file) => file.patch); // Only review files with a patch
-
-    for (let i = 0; i < filesToReview.length; i++) {
-      const file = filesToReview[i];
-      updateStatus(
-        `Analyzing file ${i + 1}/${filesToReview.length}: ${file.filename}`
-      );
-
-      const response = await fetch(
-        "https://api.openai.com/v1/chat/completions",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${openAIApiKey}`,
-          },
-          body: JSON.stringify({
-            model: "gpt-4-turbo",
-            messages: [
-              {
-                role: "system",
-                content: `You are an expert code reviewer. Your task is to analyze the provided code diff and return feedback in a JSON format. The JSON object should contain an array of "comments", where each comment has "line" (the line number relative to the diff) and "body" (your feedback). Provide feedback only if you find a substantive issue or a significant improvement. If there are no issues, return an empty "comments" array. The feedback should be concise and actionable. Diff format: Unified. The line number is the line number in the file that was changed. Diff content:\n\n${file.patch}`,
-              },
-              {
-                role: "user",
-                content: file.patch,
-              },
-            ],
-            response_format: { type: "json_object" },
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        console.error(`AI analysis failed for ${file.filename}: ${response.status} ${response.statusText}`);
-        continue;
-      }
-
-      const aiResponse = await response.json();
-      let feedback;
-      try {
-        feedback = JSON.parse(aiResponse.choices[0].message.content);
-      } catch (error) {
-        console.error(`Failed to parse AI response for ${file.filename}:`, error);
-        continue;
-      }
-
-      if (feedback.comments && feedback.comments.length > 0) {
-        for (const comment of feedback.comments) {
-          await fetch(
-            `${GITHUB_API_URL}/repos/${owner}/${repo}/pulls/${prNumber}/comments`,
-            {
-              method: "POST",
-              headers: {
-                Authorization: `token ${githubToken}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                body: comment.body,
-                commit_id: commitId,
-                path: file.filename,
-                line: comment.line,
-                side: "RIGHT",
-              }),
-            }
-          );
-        }
-      }
+    const filesToReview = files.filter((file) => file.patch);
+    if (filesToReview.length === 0) {
+      ui.updateStatus("No files with changes found to review.", false, true);
+      setTimeout(() => ui.removeStatusIndicator(), 3000);
+      return;
     }
 
-    updateStatus("Review complete! Reloading...", false, true);
+    const limit = pLimit(5);
+    let filesAnalyzed = 0;
+
+    const reviewPromises = filesToReview.map((file) =>
+      limit(async () => {
+        try {
+          const feedback = await openai.getReviewForPatch(
+            file.patch,
+            openAIApiKey
+          );
+          if (feedback.comments && feedback.comments.length > 0) {
+            const commentPromises = feedback.comments.map((comment) =>
+              github.postComment({
+                prDetails,
+                token: githubToken,
+                commitId,
+                file,
+                comment,
+              })
+            );
+            await Promise.all(commentPromises);
+          }
+        } catch (error) {
+          console.error(`Failed to process file ${file.filename}:`, error);
+        } finally {
+          filesAnalyzed++;
+          ui.updateStatus(
+            `Analyzing files... (${filesAnalyzed}/${filesToReview.length})`
+          );
+        }
+      })
+    );
+
+    await Promise.all(reviewPromises);
+
+    ui.updateStatus("Review complete! Reloading...", false, true);
     setTimeout(() => window.location.reload(), 2000);
   } catch (error) {
     console.error("PR Review Flow Error:", error);
-    updateStatus(`Error: ${error.message}`, true);
+    ui.updateStatus(`Error: ${error.message}`, true);
   }
 }
