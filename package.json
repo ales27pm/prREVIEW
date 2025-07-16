@@ -2,9 +2,10 @@
   "name": "pr-review-extension",
   "version": "0.1.0",
   "description": "Chrome extension for AI-powered PR reviews",
+  "type": "module",
   "scripts": {
     "format": "prettier --write \"extension/**/*.{js,css,html,json}\"",
-    "test": "prettier --check \"extension/**/*.{js,css,html,json}\" && jest"
+    "test": "prettier --check \"extension/**/*.{js,css,html,json}\" && NODE_OPTIONS=--experimental-vm-modules jest"
   },
   "devDependencies": {
     "jest": "^30.0.0",
