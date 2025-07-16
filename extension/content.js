@@ -148,7 +148,7 @@ async function runReviewFlow(prDetails) {
             {
               method: "POST",
               headers: {
-                Authorization: `Bearer ${githubToken}`,
+                Authorization: `token ${githubToken}`,
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({
