@@ -17,7 +17,7 @@ const DEFAULT_PROMPT = `You are an expert code reviewer. Your task is to analyze
  */
 export async function loadConfig() {
   try {
-    const settings = await chrome.storage.local.get();
+    const settings = await chrome.storage.sync.get();
 
     if (!settings.githubToken || !settings.openAIApiKey) {
       return {

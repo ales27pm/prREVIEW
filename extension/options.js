@@ -9,7 +9,7 @@ let statusTimeout;
 
 /**
  * Displays a temporary status message with a specified type on the options page.
- * 
+ *
  * @param {string} message - The message to display.
  * @param {string} [type="success"] - The type of status message ("success" or "error"), which determines the CSS class.
  */
@@ -29,7 +29,7 @@ function showStatus(message, type = "success") {
  */
 async function loadSettings() {
   try {
-    const settings = await chrome.storage.local.get();
+    const settings = await chrome.storage.sync.get();
     if (settings.githubToken) {
       githubTokenInput.value = settings.githubToken;
     }
@@ -56,7 +56,7 @@ async function saveSettings() {
   }
 
   try {
-    await chrome.storage.local.set({ githubToken, openAIApiKey });
+    await chrome.storage.sync.set({ githubToken, openAIApiKey });
     showStatus("Settings saved successfully!");
   } catch (error) {
     console.error("Failed to save settings:", error);
