@@ -18,10 +18,18 @@ chrome.runtime.onInstalled.addListener(() => {
 function startReview(tab) {
   const prDetails = extractPRDetails(tab.url);
   if (tab.id && prDetails) {
-    chrome.tabs.sendMessage(tab.id, {
-      action: "run_review",
-      prDetails: prDetails,
-    });
+    chrome.tabs.sendMessage(
+      tab.id,
+      {
+        action: "run_review",
+        prDetails: prDetails,
+      },
+      (response) => {
+        if (chrome.runtime.lastError) {
+          console.error("Failed to send message:", chrome.runtime.lastError.message);
+        }
+      }
+    );
   } else {
     console.log("Not a valid PR page.");
   }
