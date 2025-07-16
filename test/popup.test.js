@@ -1,4 +1,9 @@
-const { extractPRDetails } = require("../extension/popup.js");
+let extractPRDetails;
+
+beforeAll(async () => {
+  const url = new URL("../extension/utils.js", import.meta.url);
+  ({ extractPRDetails } = await import(url.href));
+});
 
 describe("extractPRDetails", () => {
   test("should extract details from a valid GitHub PR URL", () => {
@@ -26,6 +31,22 @@ describe("extractPRDetails", () => {
   test("should handle URLs with query parameters", () => {
     const url = "https://github.com/owner/repo-name/pull/1011?param=true";
     const expected = { owner: "owner", repo: "repo-name", prNumber: 1011 };
+    expect(extractPRDetails(url)).toEqual(expected);
+  });
+
+  test("should handle PR numbers with leading zeros", () => {
+    const url = "https://github.com/owner/repo-name/pull/00042";
+    const expected = { owner: "owner", repo: "repo-name", prNumber: 42 };
+    expect(extractPRDetails(url)).toEqual(expected);
+  });
+
+  test("should handle very large PR numbers", () => {
+    const url = "https://github.com/owner/repo-name/pull/1234567890123";
+    const expected = {
+      owner: "owner",
+      repo: "repo-name",
+      prNumber: 1234567890123,
+    };
     expect(extractPRDetails(url)).toEqual(expected);
   });
 
