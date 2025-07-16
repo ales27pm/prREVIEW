@@ -21,7 +21,10 @@ describe("getReviewForPatch", () => {
       choices: [
         {
           message: {
-            content: JSON.stringify({ comments: [{ line: 1, body: "hi" }] }),
+            content: JSON.stringify({
+              reasoning: "r",
+              comments: [{ line: 1, body: "hi" }],
+            }),
           },
         },
       ],
@@ -39,6 +42,8 @@ describe("getReviewForPatch", () => {
       maxTokens: 100,
       temperature: 0.3,
       systemPrompt: "prompt",
+      prTitle: "t",
+      prBody: "b",
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -53,7 +58,12 @@ describe("getReviewForPatch", () => {
     expect(body).toContain('"max_tokens":100');
     expect(body).toContain('"temperature":0.3');
     expect(body).toContain("diff");
-    expect(result).toEqual({ comments: [{ line: 1, body: "hi" }] });
+    expect(body).toContain("t");
+    expect(body).toContain("b");
+    expect(result).toEqual({
+      reasoning: "r",
+      comments: [{ line: 1, body: "hi" }],
+    });
   });
 
   it("throws on authentication failure", async () => {
@@ -67,6 +77,8 @@ describe("getReviewForPatch", () => {
         openAIApiKey: "bad",
         openAIModel: "gpt",
         systemPrompt: "p",
+        prTitle: "t",
+        prBody: "b",
       }),
     ).rejects.toThrow("OpenAI API: Authentication failed");
   });

@@ -6,8 +6,8 @@ const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
  * Sends the provided patch to the OpenAI chat completions endpoint using the specified configuration, and returns an object containing an array of review comments. Handles authentication errors, invalid HTTP responses, and malformed or unexpected API responses. If the response does not contain valid comments, returns an empty array.
  *
  * @param {string} patch - The unified diff patch to be reviewed.
- * @param {object} config - Configuration object with OpenAI API credentials, model, and system prompt.
- * @returns {Promise<{comments: Array<{line: number, body: string}>}>} An object containing an array of code review comments, or an empty array if none are found.
+ * @param {object} config - Configuration including OpenAI credentials and prompt options. Supports `prTitle` and `prBody` for pull request context.
+ * @returns {Promise<{reasoning: string, comments: Array<{line: number, body: string}>}>} An object with overall reasoning and an array of code review comments.
  * @throws {Error} If authentication fails, the API response is invalid, or the returned JSON is malformed.
  */
 import { loadSettings } from "./settings.js";
@@ -15,7 +15,14 @@ import { loadSettings } from "./settings.js";
 export async function getReviewForPatch(patch, config = {}) {
   const settings = await loadSettings();
   const openAIApiKey = config.openAIApiKey || settings.openAIApiKey;
-  const { openAIModel, systemPrompt, maxTokens, temperature } = config;
+  const {
+    openAIModel,
+    systemPrompt,
+    maxTokens,
+    temperature,
+    prTitle = "",
+    prBody = "",
+  } = config;
 
   if (!openAIApiKey) {
     throw new Error(
@@ -37,7 +44,7 @@ export async function getReviewForPatch(patch, config = {}) {
         { role: "system", content: systemPrompt },
         {
           role: "user",
-          content: `Analyze the following diff and provide feedback:\n\n${patch}`,
+          content: `Pull request title: ${prTitle}\nPull request description: ${prBody}\n\nAnalyze the following diff step by step. Provide a short summary of your reasoning and inline comments. Return a JSON object with \"reasoning\" and \"comments\" as described.\n\n${patch}`,
         },
       ],
       response_format: { type: "json_object" },
