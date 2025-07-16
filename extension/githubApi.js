@@ -10,12 +10,12 @@ function handleStatus(res) {
   if (!res.ok) {
     throw new Error(`GitHub API: ${res.status} ${res.statusText}`);
   }
-  
+
   // Handle 204 No Content or other responses without body
-  if (res.status === 204 || res.headers.get('content-length') === '0') {
+  if (res.status === 204 || res.headers.get("content-length") === "0") {
     return null;
   }
-  
+
   return res.json();
 }
 
@@ -31,8 +31,8 @@ export async function fetchAllPRFiles({ owner, repo, prNumber }, token) {
       {
         headers: {
           Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github+json'
-        }
+          Accept: "application/vnd.github+json",
+        },
       }
     );
     const data = await handleStatus(res);

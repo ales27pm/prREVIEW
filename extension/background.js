@@ -26,7 +26,10 @@ function startReview(tab) {
       },
       (response) => {
         if (chrome.runtime.lastError) {
-          console.error("Failed to send message:", chrome.runtime.lastError.message);
+          console.error(
+            "Failed to send message:",
+            chrome.runtime.lastError.message
+          );
         }
       }
     );

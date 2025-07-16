@@ -32,11 +32,11 @@ export function updateStatus(message, isError = false, isComplete = false) {
   if (!statusIndicator) createStatusIndicator();
   const statusText = document.getElementById("ai-review-status-text");
   const spinner = statusIndicator?.querySelector(".spinner");
-  
+
   if (statusText) {
     statusText.textContent = message;
   }
-  
+
   if (isError || isComplete) {
     if (spinner) spinner.style.display = "none";
   } else {
