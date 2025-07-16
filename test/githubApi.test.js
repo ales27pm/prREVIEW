@@ -71,4 +71,31 @@ describe("githubApi", () => {
       );
     });
   });
+
+  describe("postSummaryComment", () => {
+    it("posts a summary to the PR conversation", async () => {
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        json: async () => ({ id: 123 }),
+        headers: { get: () => null },
+      });
+
+      const result = await github.postSummaryComment({
+        prDetails: { owner: "o", repo: "r", prNumber: 5 },
+        token: "t",
+        body: "summary",
+      });
+
+      expect(fetch).toHaveBeenCalledWith(
+        "https://api.github.com/repos/o/r/issues/5/comments",
+        expect.objectContaining({
+          method: "POST",
+          headers: expect.objectContaining({ Authorization: "Bearer t" }),
+          body: JSON.stringify({ body: "summary" }),
+        }),
+      );
+      expect(result).toEqual({ id: 123 });
+    });
+  });
 });

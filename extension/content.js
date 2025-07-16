@@ -55,7 +55,7 @@ async function runReviewFlow(prDetails) {
       concurrencyLimit > 20
     ) {
       console.warn(
-        `[AI Review] Invalid concurrencyLimit (${config.concurrencyLimit}), using default value of 5 (allowed range: 1-20).`
+        `[AI Review] Invalid concurrencyLimit (${config.concurrencyLimit}), using default value of 5 (allowed range: 1-20).`,
       );
       concurrencyLimit = 5;
     }
@@ -63,6 +63,7 @@ async function runReviewFlow(prDetails) {
     let filesAnalyzed = 0;
     const reviewErrors = [];
     const postedComments = [];
+    const summary = [];
 
     const reviewPromises = filesToReview.map((file) =>
       limit(async () => {
@@ -84,6 +85,10 @@ async function runReviewFlow(prDetails) {
                 postedComments.push(postedComment);
               }
             }
+            const summaryLines = feedback.comments
+              .map((c) => `- Line ${c.line}: ${c.body}`)
+              .join("\n");
+            summary.push(`### ${file.filename}\n${summaryLines}`);
           }
         } catch (error) {
           console.error(`Failed to process file ${file.filename}:`, error);
@@ -95,6 +100,18 @@ async function runReviewFlow(prDetails) {
     );
 
     await Promise.all(reviewPromises);
+
+    if (summary.length > 0) {
+      try {
+        await github.postSummaryComment({
+          prDetails,
+          token: config.githubToken,
+          body: summary.join("\n\n"),
+        });
+      } catch (error) {
+        console.error("Failed to post summary comment:", error);
+      }
+    }
 
     if (reviewErrors.length > 0) {
       const errorMessage = `Review complete with ${reviewErrors.length} error(s). See console for details.`;

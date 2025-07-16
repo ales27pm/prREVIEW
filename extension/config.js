@@ -6,6 +6,7 @@
  * @property {number} maxTokens
  * @property {number} temperature
  * @property {string} systemPrompt
+ * @property {string} [reviewPersona]
  * @property {number} concurrencyLimit
  * @property {string|null} error
  */
@@ -14,6 +15,13 @@ const DEFAULT_MODEL = "gpt-4o";
 const DEFAULT_MAX_TOKENS = 1500;
 const DEFAULT_TEMPERATURE = 0.2;
 const DEFAULT_PROMPT = `You are an expert code reviewer. Your task is to analyze the provided code diff and return feedback in a JSON format. The JSON object should contain an array of "comments", where each comment has "line" (the line number relative to the diff) and "body" (your feedback). Provide feedback only if you find a substantive issue or a significant improvement. If there are no issues, return an empty "comments" array. The feedback should be concise and actionable. Diff format: Unified. The line number is the line number in the file that was changed.`;
+
+const PERSONA_PROMPTS = {
+  strict:
+    "You are a strict code reviewer who enforces repository guidelines such as using plain JavaScript, keeping code in the extension directory, and formatting with Prettier. Provide terse feedback only when necessary. Return JSON as described.",
+  mentor:
+    "You are a friendly mentor guiding contributors according to repository guidelines like using plain JavaScript and Prettier. Offer helpful suggestions in the JSON format described.",
+};
 
 /**
  * Retrieves the application configuration from Chrome local storage, applying default values for optional settings and validating the presence of required API keys.
@@ -41,7 +49,11 @@ export async function loadConfig() {
         settings.temperature !== undefined
           ? settings.temperature
           : DEFAULT_TEMPERATURE,
-      systemPrompt: settings.systemPrompt || DEFAULT_PROMPT,
+      systemPrompt:
+        PERSONA_PROMPTS[settings.reviewPersona] ||
+        settings.systemPrompt ||
+        DEFAULT_PROMPT,
+      reviewPersona: settings.reviewPersona || "",
       concurrencyLimit: settings.concurrencyLimit || 5,
       error: null,
     };

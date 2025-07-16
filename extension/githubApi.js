@@ -142,3 +142,28 @@ export async function postComment({
   );
   return handleGitHubResponse(res);
 }
+
+/**
+ * Posts a summary comment to the pull request conversation.
+ * @param {Object} params
+ * @param {{owner:string, repo:string, prNumber:number}} params.prDetails
+ * @param {string} params.token
+ * @param {string} params.body
+ * @returns {Promise<Object|null>} The created comment object or null.
+ */
+export async function postSummaryComment({ prDetails, token, body }) {
+  const { owner, repo, prNumber } = prDetails;
+  const res = await fetch(
+    `${GITHUB_API_URL}/repos/${owner}/${repo}/issues/${prNumber}/comments`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/vnd.github.v3+json",
+      },
+      body: JSON.stringify({ body }),
+    },
+  );
+  return handleGitHubResponse(res);
+}
