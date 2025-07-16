@@ -4,8 +4,9 @@
   "description": "Chrome extension for AI-powered PR reviews",
   "scripts": {
     "format": "prettier --write \"extension/**/*.{js,css,html,json}\"",
-    "test": "prettier --check \"extension/**/*.{js,css,html,json}\"",
-    "lint": "npm test"
+    "format:check": "prettier --check \"extension/**/*.{js,css,html,json}\"",
+    "lint": "npm run format:check",
+    "test": "echo \"No tests yet\" && exit 0"
   },
   "devDependencies": {
     "prettier": "^3.2.5"
