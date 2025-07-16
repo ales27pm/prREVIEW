@@ -4,9 +4,10 @@
   "description": "Chrome extension for AI-powered PR reviews",
   "scripts": {
     "format": "prettier --write \"extension/**/*.{js,css,html,json}\"",
-    "test": "prettier --check \"extension/**/*.{js,css,html,json}\""
+    "test": "prettier --check \"extension/**/*.{js,css,html,json}\" && jest"
   },
   "devDependencies": {
+    "jest": "^29.6.1",
     "prettier": "^2.8.8"
   }
 }
