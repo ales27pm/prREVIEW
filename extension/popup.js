@@ -11,11 +11,11 @@ document.getElementById("run-review").addEventListener("click", () => {
       if (chrome.runtime.lastError) {
         console.error(
           "Failed to trigger review:",
-          chrome.runtime.lastError.message
+          chrome.runtime.lastError.message,
         );
       }
       window.close();
-    }
+    },
   );
 });
 
