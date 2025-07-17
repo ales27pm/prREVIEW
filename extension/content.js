@@ -3,6 +3,7 @@ import * as ui from "./ui.js";
 import * as github from "./githubApi.js";
 import * as openai from "./openaiApi.js";
 import { loadConfig } from "./config.js";
+import * as feedback from "./feedback.js";
 import pLimit from "./p-limit.js";
 
 const MAX_COMMENT_LENGTH = 65000;
@@ -82,15 +83,22 @@ async function runReviewFlow(prDetails) {
             feedback.comments.length > 0
           ) {
             for (const comment of feedback.comments) {
+              const body = `AI Suggestion: ${comment.body}`;
               const postedComment = await github.postComment({
                 prDetails,
                 token: config.githubToken,
                 commitId,
                 file,
-                comment,
+                comment: { ...comment, body },
               });
               if (postedComment) {
                 postedComments.push(postedComment);
+                feedback.recordComment({
+                  owner: prDetails.owner,
+                  repo: prDetails.repo,
+                  prNumber: prDetails.prNumber,
+                  commentId: postedComment.id,
+                });
               }
             }
             const summaryLines = feedback.comments
@@ -108,6 +116,8 @@ async function runReviewFlow(prDetails) {
     );
 
     await Promise.all(reviewPromises);
+    feedback.observeComments();
+    feedback.startMergeTracker(prDetails, config.githubToken);
 
     if (summary.length > 0) {
       let summaryBody = `${github.SUMMARY_HEADER}\n${summary.join("\n\n")}`;

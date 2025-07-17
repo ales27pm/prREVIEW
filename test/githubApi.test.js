@@ -146,4 +146,28 @@ describe("githubApi", () => {
       expect(result).toEqual({ id: 10 });
     });
   });
+
+  describe("getReviewComment", () => {
+    it("fetches a single review comment", async () => {
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ id: 7, position: null }),
+        headers: { get: () => null },
+      });
+
+      const result = await github.getReviewComment(
+        { owner: "o", repo: "r", commentId: 7 },
+        "tok",
+      );
+
+      expect(fetch).toHaveBeenCalledWith(
+        "https://api.github.com/repos/o/r/pulls/comments/7",
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: "Bearer tok" }),
+        }),
+      );
+      expect(result).toEqual({ id: 7, position: null });
+    });
+  });
 });

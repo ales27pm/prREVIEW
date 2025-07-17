@@ -193,3 +193,22 @@ export async function postSummaryComment({ prDetails, token, body }) {
   );
   return handleGitHubResponse(res);
 }
+
+/**
+ * Retrieve a single review comment by ID.
+ * @param {{owner:string, repo:string, commentId:number}} params
+ * @param {string} token
+ * @returns {Promise<Object|null>}
+ */
+export async function getReviewComment({ owner, repo, commentId }, token) {
+  const res = await fetch(
+    `${GITHUB_API_URL}/repos/${owner}/${repo}/pulls/comments/${commentId}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github.v3+json",
+      },
+    },
+  );
+  return handleGitHubResponse(res);
+}
