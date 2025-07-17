@@ -52,12 +52,16 @@ describe("rag utilities", () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: async () => [{ chunk: "a", embedding: [1] }],
+      json: async () => ({
+        embeddings: [{ chunk: "a", embedding: [1] }],
+        graph: { nodes: [], edges: [] },
+      }),
     });
 
     const index = await loadIndex("/index.json");
     expect(fetchMock).toHaveBeenCalled();
-    expect(index).toEqual([{ chunk: "a", embedding: [1] }]);
+    expect(index.embeddings).toEqual([{ chunk: "a", embedding: [1] }]);
+    expect(index.graph).toEqual({ nodes: [], edges: [] });
   });
 
   test("getRelevantSnippets ranks by similarity", async () => {
