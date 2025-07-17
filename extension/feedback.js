@@ -63,7 +63,12 @@ async function updateAdoption(prDetails, token) {
       console.error("Failed to check comment adoption", e);
     }
   }
-  await chrome.storage.local.set({ [STORAGE_KEY]: list });
+-  await chrome.storage.local.set({ [STORAGE_KEY]: list });
++  try {
++    await chrome.storage.local.set({ [STORAGE_KEY]: list });
++  } catch (error) {
++    console.error("Failed to update adoption status", error);
++  }
 }
 
 export function startMergeTracker(prDetails, token) {
