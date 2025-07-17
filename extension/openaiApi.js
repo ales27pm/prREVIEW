@@ -37,7 +37,7 @@ function formatUserContent(content, model) {
  * @throws {Error} If authentication fails, the API response is invalid, or the returned JSON is malformed.
  */
 import { loadSettings } from "./settings.js";
-import { loadIndex, getRelevantSnippets } from "./rag.js";
+import { loadIndex, getRelevantSnippets, getGraphContext } from "./rag.js";
 
 export async function getReviewForPatch(patch, config = {}) {
   const settings = await loadSettings();
@@ -65,7 +65,12 @@ export async function getReviewForPatch(patch, config = {}) {
   if (config.vectorIndexUrl) {
     try {
       const index = await loadIndex(config.vectorIndexUrl);
-      const snippets = await getRelevantSnippets(patch, index, openAIApiKey);
+      const vecSnippets =
+        index && Array.isArray(index.embeddings)
+          ? await getRelevantSnippets(patch, index.embeddings, openAIApiKey)
+          : [];
+      const graphSnippets = index ? getGraphContext(patch, index) : [];
+      const snippets = Array.from(new Set([...vecSnippets, ...graphSnippets]));
       if (snippets.length > 0) {
         extraContext = `Relevant context:\n${snippets.join("\n\n")}\n\n`;
       }
@@ -153,8 +158,9 @@ async function synthesizeFeedback(reviews, config = {}) {
   const { maxTokens = 512, temperature = 0.7 } = config;
 
   const summaryPrompt =
-    "You are a senior reviewer tasked with consolidating feedback from multiple reviewers. " +
-    "Merge similar comments, prioritize important issues, and return the result as described.";
+    "You are a reflection agent. Combine the following reviews, remove duplicates, " +
+    "detect and flag contradictions, and order comments by importance. Return the cleaned " +
+    "JSON result as described.";
 
   const userContent = reviews
     .map((r, i) => `Review ${i + 1}: ${JSON.stringify(r)}`)

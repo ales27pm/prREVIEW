@@ -1,8 +1,24 @@
 // extension/feedback.js
 import * as github from "./githubApi.js";
+import { loadConfig } from "./config.js";
 
 const STORAGE_KEY = "aiFeedback";
 let styleInjected = false;
+const DEFAULT_FEEDBACK_ENDPOINT = "http://localhost:3000/feedback";
+
+async function sendFeedback(record) {
+  try {
+    const config = await loadConfig();
+    const url = config.feedbackUrl || DEFAULT_FEEDBACK_ENDPOINT;
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(record),
+    });
+  } catch (e) {
+    console.error("Failed to send feedback", e);
+  }
+}
 
 function injectStyle() {
   if (styleInjected) return;
@@ -44,6 +60,7 @@ export async function saveRating(commentId, rating) {
     if (rec) {
       rec.rating = rating;
       await chrome.storage.local.set({ [STORAGE_KEY]: list });
+      await sendFeedback(rec);
     }
   } catch (error) {
     console.error("Failed to save rating", error);
@@ -75,6 +92,7 @@ async function updateAdoption(prDetails, token) {
       } else {
         r.adopted = false;
       }
+      await sendFeedback(r);
     } catch (e) {
       console.error("Failed to check comment adoption", e);
     }
