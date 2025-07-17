@@ -26,12 +26,21 @@ export async function recordComment({ owner, repo, prNumber, commentId }) {
 }
 
 export async function saveRating(commentId, rating) {
-  const data = await chrome.storage.local.get(STORAGE_KEY);
-  const list = data[STORAGE_KEY] || [];
-  const rec = list.find((r) => r.commentId === commentId);
-  if (rec) {
-    rec.rating = rating;
-    await chrome.storage.local.set({ [STORAGE_KEY]: list });
+  if (!commentId || !["up", "down"].includes(rating)) {
+    throw new Error("Invalid commentId or rating");
+  }
+
+  try {
+    const data = await chrome.storage.local.get(STORAGE_KEY);
+    const list = data[STORAGE_KEY] || [];
+    const rec = list.find((r) => r.commentId === commentId);
+    if (rec) {
+      rec.rating = rating;
+      await chrome.storage.local.set({ [STORAGE_KEY]: list });
+    }
+  } catch (error) {
+    console.error("Failed to save rating", error);
+    throw error;
   }
 }
 
