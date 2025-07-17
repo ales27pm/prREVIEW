@@ -17,6 +17,8 @@ All extension code lives in the `extension/` folder.
    OpenAI credentials. Copy `extension/settings.example.json` to
    `extension/settings.local.json` for non-secret settings. The extension reads
    tokens from environment variables so they are never stored in source control.
+   When entered via the options page, credentials are saved only to Chrome's
+   local storage and will not sync across browsers.
 
 3. **Format and test.** Use Prettier to format your code and run the test
    suite before committing:

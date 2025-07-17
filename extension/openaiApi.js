@@ -9,6 +9,23 @@ function truncateText(text, maxLength = MAX_METADATA_LENGTH) {
     : trimmed;
 }
 
+const CLAUDE_MODELS = [
+  "claude-1",
+  "claude-1.2",
+  "claude-2",
+  "claude-2.0",
+  "claude-2.1",
+  "claude-3-opus-20240229",
+  "claude-3-sonnet-20240229",
+  "claude-3-haiku-20240307",
+];
+
+function formatUserContent(content, model) {
+  const normalized = (model || "").toLowerCase();
+  const isClaude = CLAUDE_MODELS.some((m) => m.toLowerCase() === normalized);
+  return isClaude ? `<analysis>\n${content}\n</analysis>` : content;
+}
+
 /**
  * Submits a unified diff patch to the OpenAI API for automated code review and returns structured feedback.
  *
@@ -77,7 +94,10 @@ export async function getReviewForPatch(patch, config = {}) {
         { role: "system", content: systemPrompt },
         {
           role: "user",
-          content: `${prContext}${extraContext}Analyze the following diff step by step. Provide a short summary of your reasoning and inline comments. Return a JSON object with \"reasoning\" and \"comments\" as described.\n\n${patch}`,
+          content: formatUserContent(
+            `${prContext}${extraContext}Analyze the following diff step by step. Provide a short summary of your reasoning and inline comments. Return a JSON object with \"reasoning\" and \"comments\" as described.\n\n${patch}`,
+            openAIModel,
+          ),
         },
       ],
       response_format: { type: "json_object" },
