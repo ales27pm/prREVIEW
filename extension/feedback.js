@@ -107,10 +107,24 @@ function addButtons(bodyEl, commentId) {
   down.textContent = "\uD83D\uDC4E"; // thumbs down
   container.appendChild(up);
   container.appendChild(down);
-  up.addEventListener("click", () => saveRating(parseInt(commentId, 10), "up"));
-  down.addEventListener("click", () =>
-    saveRating(parseInt(commentId, 10), "down"),
-  );
+  up.addEventListener("click", async () => {
+    try {
+      const id = parseInt(commentId, 10);
+      if (isNaN(id)) throw new Error("Invalid comment ID");
+      await saveRating(id, "up");
+    } catch (error) {
+      console.error("Failed to save thumbs up rating", error);
+    }
+  });
+  down.addEventListener("click", async () => {
+    try {
+      const id = parseInt(commentId, 10);
+      if (isNaN(id)) throw new Error("Invalid comment ID");
+      await saveRating(id, "down");
+    } catch (error) {
+      console.error("Failed to save thumbs down rating", error);
+    }
+  });
   bodyEl.appendChild(container);
 }
 
