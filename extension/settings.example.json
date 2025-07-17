@@ -1,0 +1,6 @@
+{
+  "openAIModel": "gpt-4o",
+  "maxTokens": 1500,
+  "temperature": 0.2,
+  "reviewPersona": "strict"
+}
