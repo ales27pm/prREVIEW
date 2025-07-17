@@ -9,7 +9,9 @@ const fetchMock = jest.fn();
 
 global.fetch = fetchMock;
 
-const { getReviewForPatch } = await import("../extension/openaiApi.js");
+const { getReviewForPatch, getMultiAgentReviewForPatch } = await import(
+  "../extension/openaiApi.js"
+);
 
 describe("getReviewForPatch", () => {
   beforeEach(() => {
@@ -109,5 +111,77 @@ describe("getReviewForPatch", () => {
         prBody: "b",
       }),
     ).rejects.toThrow("OpenAI API: Authentication failed");
+  });
+});
+
+describe("getMultiAgentReviewForPatch", () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+  });
+
+  const review = {
+    choices: [{ message: { content: JSON.stringify({ comments: [] }) } }],
+  };
+  const final = {
+    choices: [
+      {
+        message: {
+          content: JSON.stringify({ comments: [{ line: 1, body: "x" }] }),
+        },
+      },
+    ],
+  };
+
+  [1, 2, 3].forEach((agentCount) => {
+    it(`runs ${agentCount} reviews and synthesizes them`, async () => {
+      for (let i = 0; i < agentCount; i++) {
+        fetchMock.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => review,
+        });
+      }
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => final,
+      });
+
+      const res = await getMultiAgentReviewForPatch("d", {
+        openAIApiKey: "k",
+        openAIModel: "gpt",
+        maxTokens: 10,
+        temperature: 0,
+        agentCount,
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(agentCount + 1);
+      expect(res).toEqual({ comments: [{ line: 1, body: "x" }] });
+    });
+  });
+
+  it("defaults to 3 agents when agentCount is missing", async () => {
+    for (let i = 0; i < 3; i++) {
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => review,
+      });
+    }
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => final,
+    });
+
+    const res = await getMultiAgentReviewForPatch("d", {
+      openAIApiKey: "k",
+      openAIModel: "gpt",
+      maxTokens: 10,
+      temperature: 0,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(res).toEqual({ comments: [{ line: 1, body: "x" }] });
   });
 });
