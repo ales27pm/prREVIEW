@@ -9,10 +9,21 @@ function truncateText(text, maxLength = MAX_METADATA_LENGTH) {
     : trimmed;
 }
 
+const CLAUDE_MODELS = [
+  "claude-1",
+  "claude-1.2",
+  "claude-2",
+  "claude-2.0",
+  "claude-2.1",
+  "claude-3-opus-20240229",
+  "claude-3-sonnet-20240229",
+  "claude-3-haiku-20240307",
+];
+
 function formatUserContent(content, model) {
-  return /claude/i.test(model || "")
-    ? `<analysis>\n${content}\n</analysis>`
-    : content;
+  const normalized = (model || "").toLowerCase();
+  const isClaude = CLAUDE_MODELS.some((m) => m.toLowerCase() === normalized);
+  return isClaude ? `<analysis>\n${content}\n</analysis>` : content;
 }
 
 /**

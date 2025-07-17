@@ -112,6 +112,59 @@ describe("getReviewForPatch", () => {
       }),
     ).rejects.toThrow("OpenAI API: Authentication failed");
   });
+
+  it("wraps prompts in XML for Claude models", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({ reasoning: "r", comments: [] }),
+            },
+          },
+        ],
+      }),
+    });
+
+    await getReviewForPatch("diff", {
+      openAIApiKey: "k",
+      openAIModel: "claude-2",
+      systemPrompt: "p",
+    });
+
+    const body = fetchMock.mock.calls[0][1].body;
+    expect(body).toContain("<analysis>");
+    expect(body).toContain("</analysis>");
+  });
+
+  it("does not wrap prompts for unknown models", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({ reasoning: "r", comments: [] }),
+            },
+          },
+        ],
+      }),
+    });
+
+    await getReviewForPatch("diff", {
+      openAIApiKey: "k",
+      openAIModel: "claude-ish",
+      systemPrompt: "p",
+    });
+
+    const body = fetchMock.mock.calls[0][1].body;
+    expect(body).not.toContain("<analysis>");
+  });
 });
 
 describe("getMultiAgentReviewForPatch", () => {
