@@ -29,6 +29,11 @@ jest.unstable_mockModule("../extension/ui.js", () => ({
   updateStatus: jest.fn(),
   removeStatusIndicator: jest.fn(),
 }));
+jest.unstable_mockModule("../extension/feedback.js", () => ({
+  observeComments: jest.fn(),
+  startMergeTracker: jest.fn(),
+  recordComment: jest.fn(),
+}));
 
 beforeEach(() => {
   resetChrome();
