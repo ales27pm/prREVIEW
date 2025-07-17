@@ -25,6 +25,15 @@ const PERSONA_PROMPTS = {
     "You are a friendly mentor guiding contributors according to repository guidelines like using plain JavaScript and Prettier. Offer helpful suggestions in the JSON format described.",
 };
 
+const MODE_PROMPTS = {
+  security:
+    "You are a security auditor. Focus on vulnerabilities and insecure patterns. Return JSON with optional suggestedDiff fields for fixes.",
+  performance:
+    "You are a performance expert. Look for inefficiencies and propose improvements. Include suggestedDiff when possible.",
+  tests:
+    "You are a test generation assistant. Suggest missing tests and provide example diffs to add them.",
+};
+
 /**
  * Retrieves the application configuration from Chrome local storage, applying default values for optional settings and validating the presence of required API keys.
  * @returns {Promise<AppConfig>} Resolves to the configuration object, or an error message if required keys are missing or loading fails.
@@ -49,6 +58,21 @@ export async function loadConfig() {
       };
     }
 
+    const reviewMode = settings.reviewMode || "default";
+    const personaPrompt =
+      settings.reviewPersona &&
+      Object.prototype.hasOwnProperty.call(
+        PERSONA_PROMPTS,
+        settings.reviewPersona,
+      )
+        ? PERSONA_PROMPTS[settings.reviewPersona]
+        : null;
+    const modePrompt =
+      reviewMode &&
+      Object.prototype.hasOwnProperty.call(MODE_PROMPTS, reviewMode)
+        ? MODE_PROMPTS[reviewMode]
+        : null;
+
     return {
       githubToken,
       openAIApiKey,
@@ -59,23 +83,9 @@ export async function loadConfig() {
           ? settings.temperature
           : DEFAULT_TEMPERATURE,
       systemPrompt:
-        settings.systemPrompt ||
-        (settings.reviewPersona &&
-        Object.prototype.hasOwnProperty.call(
-          PERSONA_PROMPTS,
-          settings.reviewPersona,
-        )
-          ? PERSONA_PROMPTS[settings.reviewPersona]
-          : null) ||
-        DEFAULT_PROMPT,
-      reviewPersona:
-        settings.reviewPersona &&
-        Object.prototype.hasOwnProperty.call(
-          PERSONA_PROMPTS,
-          settings.reviewPersona,
-        )
-          ? settings.reviewPersona
-          : "",
+        settings.systemPrompt || modePrompt || personaPrompt || DEFAULT_PROMPT,
+      reviewPersona: personaPrompt ? settings.reviewPersona : "",
+      reviewMode,
       concurrencyLimit: settings.concurrencyLimit || 5,
       vectorIndexUrl: settings.vectorIndexUrl || "",
       feedbackUrl:
