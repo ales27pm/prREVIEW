@@ -30,6 +30,9 @@ export function cosineSimilarity(a, b) {
     normA += a[i] ** 2;
     normB += b[i] ** 2;
   }
+  if (normA === 0 || normB === 0) {
+    return 0;
+  }
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
@@ -46,11 +49,21 @@ export async function loadIndex(url) {
 }
 
 export async function getRelevantSnippets(query, index, apiKey, topK = 3) {
+  if (!Array.isArray(index) || index.length === 0) {
+    return [];
+  }
   const queryEmbedding = await getEmbedding(query, apiKey);
-  const scored = index.map((entry) => ({
-    ...entry,
-    score: cosineSimilarity(queryEmbedding, entry.embedding),
-  }));
+  const scored = index
+    .filter(
+      (entry) =>
+        entry &&
+        typeof entry.chunk === "string" &&
+        Array.isArray(entry.embedding),
+    )
+    .map((entry) => ({
+      ...entry,
+      score: cosineSimilarity(queryEmbedding, entry.embedding),
+    }));
   scored.sort((a, b) => b.score - a.score);
   return scored.slice(0, topK).map((e) => e.chunk);
 }
