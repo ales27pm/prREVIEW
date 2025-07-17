@@ -120,7 +120,7 @@ export async function buildIndex(rootDir, apiKey, concurrencyLimit = 5) {
               calleeName = node.callee.name;
             } else if (
               node.callee.type === "MemberExpression" &&
-              node.callee.property.type === "Identifier"
+              node.callee.property?.type === "Identifier"
             ) {
               calleeName = node.callee.property.name;
             }
@@ -128,8 +128,8 @@ export async function buildIndex(rootDir, apiKey, concurrencyLimit = 5) {
             const caller = ancestors
               .slice()
               .reverse()
-              .find((a) => a.type === "FunctionDeclaration" && a.id);
-            if (caller && caller.id) {
+              .find((a) => a.type === "FunctionDeclaration" && a.id?.name);
+            if (caller?.id?.name) {
               const from = `${rel}:${caller.id.name}`;
               const to = `${rel}:${calleeName}`;
               builder.addEdge({ from, to, type: "calls" });

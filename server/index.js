@@ -1,8 +1,11 @@
 import express from "express";
 import fs from "fs/promises";
+import path from "path";
+import cors from "cors";
 
 const app = express();
 app.use(express.json());
+app.use(cors());
 
 const DATA_FILE = process.env.FEEDBACK_FILE || "feedbackData.json";
 
@@ -16,7 +19,10 @@ async function readData() {
 }
 
 async function writeData(data) {
-  await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2));
+  const dir = path.dirname(DATA_FILE);
+  const tmp = path.join(dir, `.tmp_${Date.now()}`);
+  await fs.writeFile(tmp, JSON.stringify(data, null, 2));
+  await fs.rename(tmp, DATA_FILE);
 }
 
 function isValid(record) {
@@ -33,15 +39,20 @@ function isValid(record) {
 }
 
 app.post("/feedback", async (req, res) => {
-  const record = req.body || {};
-  if (!isValid(record)) {
-    res.status(400).json({ ok: false, error: "invalid record" });
-    return;
+  try {
+    const record = req.body || {};
+    if (!isValid(record)) {
+      res.status(400).json({ ok: false, error: "invalid record" });
+      return;
+    }
+    const data = await readData();
+    data.push({ ...record, ts: Date.now() });
+    await writeData(data);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Failed to store feedback", err);
+    res.status(500).json({ ok: false, error: "server error" });
   }
-  const data = await readData();
-  data.push({ ...record, ts: Date.now() });
-  await writeData(data);
-  res.json({ ok: true });
 });
 
 app.get("/analytics", async (_req, res) => {

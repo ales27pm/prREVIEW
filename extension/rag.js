@@ -118,7 +118,15 @@ export function traverseGraph(startIds, graph, depth = 1) {
 }
 
 export function getGraphContext(diff, indexData, depth = 1) {
-  if (!indexData.graph) return [];
+  if (
+    !indexData ||
+    !indexData.graph ||
+    !Array.isArray(indexData.graph.nodes) ||
+    !Array.isArray(indexData.graph.edges) ||
+    !Array.isArray(indexData.embeddings)
+  ) {
+    return [];
+  }
   const symbols = extractSymbols(diff);
   const nodesMap = new Map(indexData.graph.nodes.map((n) => [n.id, n]));
   const start = indexData.graph.nodes
@@ -127,11 +135,13 @@ export function getGraphContext(diff, indexData, depth = 1) {
   if (start.length === 0) return [];
   const ids = traverseGraph(start, indexData.graph, depth);
   const snippets = [];
+  const seenFiles = new Set();
   for (const id of ids) {
     const node = nodesMap.get(id);
-    if (!node || !node.file) continue;
+    if (!node || !node.file || seenFiles.has(node.file)) continue;
+    seenFiles.add(node.file);
     const chunks = indexData.embeddings
-      .filter((e) => e.path === node.file)
+      .filter((e) => e.path === node.file && typeof e.chunk === "string")
       .map((e) => e.chunk);
     snippets.push(...chunks);
     if (snippets.length >= 3) break;

@@ -65,12 +65,11 @@ export async function getReviewForPatch(patch, config = {}) {
   if (config.vectorIndexUrl) {
     try {
       const index = await loadIndex(config.vectorIndexUrl);
-      const vecSnippets = await getRelevantSnippets(
-        patch,
-        index.embeddings,
-        openAIApiKey,
-      );
-      const graphSnippets = getGraphContext(patch, index);
+      const vecSnippets =
+        index && Array.isArray(index.embeddings)
+          ? await getRelevantSnippets(patch, index.embeddings, openAIApiKey)
+          : [];
+      const graphSnippets = index ? getGraphContext(patch, index) : [];
       const snippets = Array.from(new Set([...vecSnippets, ...graphSnippets]));
       if (snippets.length > 0) {
         extraContext = `Relevant context:\n${snippets.join("\n\n")}\n\n`;
