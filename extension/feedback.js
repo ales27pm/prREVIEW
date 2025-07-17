@@ -17,7 +17,14 @@ export async function recordComment({ owner, repo, prNumber, commentId }) {
   try {
     const data = await chrome.storage.local.get(STORAGE_KEY);
     const list = data[STORAGE_KEY] || [];
-    list.push({ owner, repo, prNumber, commentId, rating: null, adopted: null });
+    list.push({
+      owner,
+      repo,
+      prNumber,
+      commentId,
+      rating: null,
+      adopted: null,
+    });
     await chrome.storage.local.set({ [STORAGE_KEY]: list });
   } catch (error) {
     console.error("Failed to record comment", error);
@@ -72,20 +79,18 @@ async function updateAdoption(prDetails, token) {
       console.error("Failed to check comment adoption", e);
     }
   }
--  await chrome.storage.local.set({ [STORAGE_KEY]: list });
-+  try {
-+    await chrome.storage.local.set({ [STORAGE_KEY]: list });
-+  } catch (error) {
-+    console.error("Failed to update adoption status", error);
-+  }
+  try {
+    await chrome.storage.local.set({ [STORAGE_KEY]: list });
+  } catch (error) {
+    console.error("Failed to update adoption status", error);
+  }
 }
 
 export function startMergeTracker(prDetails, token) {
   const interval = setInterval(async () => {
     try {
       const pr = await github.getPRData(prDetails, token);
--      if (pr && pr.merged_at) {
-+      if (pr?.merged_at) {
+      if (pr?.merged_at) {
         clearInterval(interval);
         await updateAdoption(prDetails, token);
       }
@@ -93,7 +98,7 @@ export function startMergeTracker(prDetails, token) {
       console.error("Merge check failed", e);
     }
   }, 60000);
-+  return interval;
+  return interval;
 }
 
 function addButtons(bodyEl, commentId) {

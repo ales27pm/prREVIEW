@@ -19,6 +19,7 @@ function truncateText(text, maxLength = MAX_METADATA_LENGTH) {
  * @throws {Error} If authentication fails, the API response is invalid, or the returned JSON is malformed.
  */
 import { loadSettings } from "./settings.js";
+import { loadIndex, getRelevantSnippets } from "./rag.js";
 
 export async function getReviewForPatch(patch, config = {}) {
   const settings = await loadSettings();
@@ -38,6 +39,19 @@ export async function getReviewForPatch(patch, config = {}) {
   if (title) prContext += `Pull request title: ${title}\n`;
   if (body) prContext += `Pull request description: ${body}\n`;
   if (prContext) prContext += "\n";
+
+  let extraContext = "";
+  if (config.vectorIndexUrl) {
+    try {
+      const index = await loadIndex(config.vectorIndexUrl);
+      const snippets = await getRelevantSnippets(patch, index, openAIApiKey);
+      if (snippets.length > 0) {
+        extraContext = `Relevant context:\n${snippets.join("\n\n")}\n\n`;
+      }
+    } catch (err) {
+      console.error("Failed to retrieve context for RAG:", err);
+    }
+  }
 
   if (!openAIApiKey) {
     throw new Error(
@@ -59,7 +73,7 @@ export async function getReviewForPatch(patch, config = {}) {
         { role: "system", content: systemPrompt },
         {
           role: "user",
-          content: `${prContext}Analyze the following diff step by step. Provide a short summary of your reasoning and inline comments. Return a JSON object with \"reasoning\" and \"comments\" as described.\n\n${patch}`,
+          content: `${prContext}${extraContext}Analyze the following diff step by step. Provide a short summary of your reasoning and inline comments. Return a JSON object with \"reasoning\" and \"comments\" as described.\n\n${patch}`,
         },
       ],
       response_format: { type: "json_object" },

@@ -8,6 +8,7 @@
  * @property {string} systemPrompt
  * @property {string} [reviewPersona]
  * @property {number} concurrencyLimit
+ * @property {string} [vectorIndexUrl]
  * @property {string|null} error
  */
 
@@ -68,6 +69,7 @@ export async function loadConfig() {
           ? settings.reviewPersona
           : "",
       concurrencyLimit: settings.concurrencyLimit || 5,
+      vectorIndexUrl: settings.vectorIndexUrl || "",
       error: null,
     };
   } catch (error) {
