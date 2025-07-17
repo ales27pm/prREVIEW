@@ -49,7 +49,8 @@ export async function loadIndex(url) {
     data &&
     Array.isArray(data.embeddings) &&
     data.graph &&
-    Array.isArray(data.graph.nodes)
+    Array.isArray(data.graph.nodes) &&
+    Array.isArray(data.graph.edges)
   ) {
     return data;
   }
@@ -93,20 +94,25 @@ export function extractSymbols(diff) {
 }
 
 export function traverseGraph(startIds, graph, depth = 1) {
+  const edgesMap = new Map();
+  for (const e of graph.edges) {
+    if (!edgesMap.has(e.from)) edgesMap.set(e.from, []);
+    edgesMap.get(e.from).push(e.to);
+  }
   const result = new Set(startIds);
   let frontier = Array.from(startIds);
-  for (let d = 0; d < depth; d++) {
+  for (let d = 0; d < depth && frontier.length > 0; d++) {
     const next = [];
     for (const id of frontier) {
-      for (const e of graph.edges) {
-        if (e.from === id && !result.has(e.to)) {
-          result.add(e.to);
-          next.push(e.to);
+      const targets = edgesMap.get(id) || [];
+      for (const t of targets) {
+        if (!result.has(t)) {
+          result.add(t);
+          next.push(t);
         }
       }
     }
     frontier = next;
-    if (frontier.length === 0) break;
   }
   return Array.from(result);
 }
@@ -114,6 +120,7 @@ export function traverseGraph(startIds, graph, depth = 1) {
 export function getGraphContext(diff, indexData, depth = 1) {
   if (!indexData.graph) return [];
   const symbols = extractSymbols(diff);
+  const nodesMap = new Map(indexData.graph.nodes.map((n) => [n.id, n]));
   const start = indexData.graph.nodes
     .filter((n) => symbols.includes(n.name))
     .map((n) => n.id);
@@ -121,7 +128,7 @@ export function getGraphContext(diff, indexData, depth = 1) {
   const ids = traverseGraph(start, indexData.graph, depth);
   const snippets = [];
   for (const id of ids) {
-    const node = indexData.graph.nodes.find((n) => n.id === id);
+    const node = nodesMap.get(id);
     if (!node || !node.file) continue;
     const chunks = indexData.embeddings
       .filter((e) => e.path === node.file)

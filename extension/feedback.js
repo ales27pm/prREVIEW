@@ -1,13 +1,16 @@
 // extension/feedback.js
 import * as github from "./githubApi.js";
+import { loadConfig } from "./config.js";
 
 const STORAGE_KEY = "aiFeedback";
 let styleInjected = false;
-const FEEDBACK_ENDPOINT = "http://localhost:3000/feedback";
+const DEFAULT_FEEDBACK_ENDPOINT = "http://localhost:3000/feedback";
 
 async function sendFeedback(record) {
   try {
-    await fetch(FEEDBACK_ENDPOINT, {
+    const config = await loadConfig();
+    const url = config.feedbackUrl || DEFAULT_FEEDBACK_ENDPOINT;
+    await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(record),

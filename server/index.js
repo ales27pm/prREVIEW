@@ -19,8 +19,25 @@ async function writeData(data) {
   await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2));
 }
 
+function isValid(record) {
+  return (
+    record &&
+    typeof record.owner === "string" &&
+    typeof record.repo === "string" &&
+    Number.isInteger(record.prNumber) &&
+    Number.isInteger(record.commentId) &&
+    (record.rating === "up" ||
+      record.rating === "down" ||
+      record.rating === null)
+  );
+}
+
 app.post("/feedback", async (req, res) => {
   const record = req.body || {};
+  if (!isValid(record)) {
+    res.status(400).json({ ok: false, error: "invalid record" });
+    return;
+  }
   const data = await readData();
   data.push({ ...record, ts: Date.now() });
   await writeData(data);
@@ -43,4 +60,7 @@ app.get("/export", async (_req, res) => {
 });
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`Feedback backend listening on ${port}`));
+const host = process.env.HOST || "localhost";
+app.listen(port, host, () =>
+  console.log(`Feedback backend listening on ${host}:${port}`),
+);

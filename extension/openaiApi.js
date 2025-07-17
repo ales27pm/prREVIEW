@@ -71,7 +71,7 @@ export async function getReviewForPatch(patch, config = {}) {
         openAIApiKey,
       );
       const graphSnippets = getGraphContext(patch, index);
-      const snippets = [...vecSnippets, ...graphSnippets];
+      const snippets = Array.from(new Set([...vecSnippets, ...graphSnippets]));
       if (snippets.length > 0) {
         extraContext = `Relevant context:\n${snippets.join("\n\n")}\n\n`;
       }

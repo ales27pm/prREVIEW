@@ -9,6 +9,7 @@
  * @property {string} [reviewPersona]
  * @property {number} concurrencyLimit
  * @property {string} [vectorIndexUrl]
+ * @property {string} [feedbackUrl]
  * @property {string|null} error
  */
 
@@ -77,6 +78,12 @@ export async function loadConfig() {
           : "",
       concurrencyLimit: settings.concurrencyLimit || 5,
       vectorIndexUrl: settings.vectorIndexUrl || "",
+      feedbackUrl:
+        settings.feedbackUrl ||
+        (typeof process !== "undefined"
+          ? process.env.FEEDBACK_ENDPOINT
+          : undefined) ||
+        "http://localhost:3000/feedback",
       error: null,
     };
   } catch (error) {
