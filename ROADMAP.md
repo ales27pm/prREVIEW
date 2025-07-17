@@ -16,12 +16,19 @@ This roadmap outlines the recommended steps to evolve the PR Review Assistant in
    - Detect the configured language model.
    - Apply model‑optimized prompt formatting (e.g., wrap prompts in XML for Claude models).
 
+**Success metrics**
+
+- API credentials stored locally for all new installations.
+- Lint and tests pass after `content.js` refactor.
+- Benchmark prompt response quality before and after model‑specific formatting.
+
 ## Phase 2: Architectural Evolution (3‑9 Months)
 
 1. **Knowledge Graph–Enhanced RAG**
-   - Extend the repository indexer (`indexRepo.js`) to extract entities (functions, classes, modules) and their relationships.
-   - Store this structured data alongside vector embeddings.
-   - Update `rag.js` to traverse the knowledge graph when retrieving context.
+   - **Step 1:** extend the repository indexer (`indexRepo.js`) to capture a simple call graph.
+   - **Step 2:** incorporate class and module relationships into the graph.
+   - **Step 3:** store the graph alongside vector embeddings and expose a query API.
+   - **Step 4:** update `rag.js` to retrieve context via graph traversal.
 
 2. **Feedback Backend & Analytics**
    - Build a backend service to collect explicit ratings and adoption data from `feedback.js`.
@@ -31,6 +38,12 @@ This roadmap outlines the recommended steps to evolve the PR Review Assistant in
 3. **Advanced Multi‑Agent Reflection**
    - Enhance the synthesizer agent in `openaiApi.js` to act as a reflector that filters, deduplicates and prioritizes comments from initial agents.
    - Tune prompts to emphasize contradiction detection and noise reduction.
+
+**Success metrics**
+
+- Knowledge graph retrieval demonstrates higher context relevance in unit tests.
+- Feedback backend collects at least 100 ratings with analytics dashboards available.
+- Multi‑agent reflection reduces duplicate comments in synthetic benchmarks.
 
 ## Phase 3: Advanced Intelligence (9‑18+ Months)
 
@@ -45,6 +58,12 @@ This roadmap outlines the recommended steps to evolve the PR Review Assistant in
 3. **One‑Click Code Suggestions**
    - Enable the assistant to propose code diffs in a structured format.
    - Render proposed diffs in the GitHub UI for easy application by developers.
+
+**Success metrics**
+
+- Fine‑tuned models outperform base models on adoption rate by at least 10%.
+- Security/performance/test modules usable by beta users with positive feedback.
+- End‑to‑end flow for applying code suggestions validated in user testing.
 
 ---
 
