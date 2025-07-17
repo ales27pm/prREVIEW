@@ -25,16 +25,24 @@ This roadmap outlines the recommended steps to evolve the PR Review Assistant in
 2. **Refactor `content.js`**
    - Break the `runReviewFlow` logic into smaller modules for UI updates, GitHub API calls, and OpenAI API calls.
    - Move orchestration logic that does not require DOM access to the service worker for better scalability.
+3. **Enhanced Prompting**
+   - Refine default prompts to encourage concise reasoning and actionable comments.
+   - Experiment with system-level instructions to improve comment relevance.
 
-3. **Model‑Specific Prompt Handling**
+4. **Model‑Specific Prompt Handling**
    - Detect the configured language model.
    - Apply model‑optimized prompt formatting (e.g., wrap prompts in XML for Claude models).
+
+5. **Human Feedback Loop**
+   - Attach thumbs-up/down buttons to AI comments via `feedback.js`.
+   - Track comment adoption after merge to measure usefulness.
 
 **Success metrics**
 
 - API credentials stored locally for all new installations.
 - Lint and tests pass after `content.js` refactor.
 - Benchmark prompt response quality before and after model‑specific formatting.
+- User feedback collected for at least 20 AI comments with adoption tracking enabled.
 
 ## Phase 2: Architectural Evolution
 
