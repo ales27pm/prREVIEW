@@ -119,32 +119,55 @@ describe("getMultiAgentReviewForPatch", () => {
     fetchMock.mockReset();
   });
 
-  it("runs multiple reviews and synthesizes them", async () => {
-    const review1 = {
-      choices: [{ message: { content: JSON.stringify({ comments: [] }) } }],
-    };
-    const review2 = {
-      choices: [{ message: { content: JSON.stringify({ comments: [] }) } }],
-    };
-    const final = {
-      choices: [
-        {
-          message: {
-            content: JSON.stringify({ comments: [{ line: 1, body: "x" }] }),
-          },
+  const review = {
+    choices: [{ message: { content: JSON.stringify({ comments: [] }) } }],
+  };
+  const final = {
+    choices: [
+      {
+        message: {
+          content: JSON.stringify({ comments: [{ line: 1, body: "x" }] }),
         },
-      ],
-    };
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => review1,
+      },
+    ],
+  };
+
+  [1, 2, 3].forEach((agentCount) => {
+    it(`runs ${agentCount} reviews and synthesizes them`, async () => {
+      for (let i = 0; i < agentCount; i++) {
+        fetchMock.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => review,
+        });
+      }
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => final,
+      });
+
+      const res = await getMultiAgentReviewForPatch("d", {
+        openAIApiKey: "k",
+        openAIModel: "gpt",
+        maxTokens: 10,
+        temperature: 0,
+        agentCount,
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(agentCount + 1);
+      expect(res).toEqual({ comments: [{ line: 1, body: "x" }] });
     });
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => review2,
-    });
+  });
+
+  it("defaults to 3 agents when agentCount is missing", async () => {
+    for (let i = 0; i < 3; i++) {
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => review,
+      });
+    }
     fetchMock.mockResolvedValueOnce({
       ok: true,
       status: 200,
@@ -156,10 +179,9 @@ describe("getMultiAgentReviewForPatch", () => {
       openAIModel: "gpt",
       maxTokens: 10,
       temperature: 0,
-      agentCount: 2,
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(res).toEqual({ comments: [{ line: 1, body: "x" }] });
   });
 });

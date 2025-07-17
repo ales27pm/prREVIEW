@@ -1,5 +1,6 @@
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 const MAX_METADATA_LENGTH = 200;
+const DEFAULT_MODEL = "gpt-4o";
 
 function truncateText(text, maxLength = MAX_METADATA_LENGTH) {
   const trimmed = (text || "").trim();
@@ -122,8 +123,8 @@ export async function getReviewForPatch(patch, config = {}) {
 async function synthesizeFeedback(reviews, config = {}) {
   const settings = await loadSettings();
   const openAIApiKey = config.openAIApiKey || settings.openAIApiKey;
-  const model = config.synthModel || config.openAIModel;
-  const { maxTokens, temperature } = config;
+  const model = config.synthModel || config.openAIModel || DEFAULT_MODEL;
+  const { maxTokens = 512, temperature = 0.7 } = config;
 
   const summaryPrompt =
     "You are a senior reviewer tasked with consolidating feedback from multiple reviewers. " +
