@@ -70,7 +70,8 @@ export function startMergeTracker(prDetails, token) {
   const interval = setInterval(async () => {
     try {
       const pr = await github.getPRData(prDetails, token);
-      if (pr && pr.merged_at) {
+-      if (pr && pr.merged_at) {
++      if (pr?.merged_at) {
         clearInterval(interval);
         await updateAdoption(prDetails, token);
       }
@@ -78,6 +79,7 @@ export function startMergeTracker(prDetails, token) {
       console.error("Merge check failed", e);
     }
   }, 60000);
++  return interval;
 }
 
 function addButtons(bodyEl, commentId) {
