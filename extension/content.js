@@ -76,7 +76,10 @@ async function runReviewFlow(prDetails) {
           ui.updateStatus(
             `Analyzing files... (${filesAnalyzed + 1}/${filesToReview.length})`,
           );
-          const feedback = await openai.getReviewForPatch(file.patch, config);
+          const feedback = await openai.getMultiAgentReviewForPatch(
+            file.patch,
+            config,
+          );
           if (
             feedback &&
             Array.isArray(feedback.comments) &&

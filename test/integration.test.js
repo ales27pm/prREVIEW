@@ -3,7 +3,7 @@ import { setupChrome, resetChrome } from "./chromeMock.js";
 
 // Mock modules used by content.js
 jest.unstable_mockModule("../extension/openaiApi.js", () => ({
-  getReviewForPatch: jest.fn().mockResolvedValue({ comments: [] }),
+  getMultiAgentReviewForPatch: jest.fn().mockResolvedValue({ comments: [] }),
 }));
 jest.unstable_mockModule("../extension/githubApi.js", () => ({
   fetchAllPRFiles: jest
@@ -62,5 +62,5 @@ test("popup click triggers OpenAI call", async () => {
   );
 
   const openai = await import("../extension/openaiApi.js");
-  expect(openai.getReviewForPatch).toHaveBeenCalled();
+  expect(openai.getMultiAgentReviewForPatch).toHaveBeenCalled();
 });

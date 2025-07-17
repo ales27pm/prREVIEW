@@ -9,7 +9,9 @@ const fetchMock = jest.fn();
 
 global.fetch = fetchMock;
 
-const { getReviewForPatch } = await import("../extension/openaiApi.js");
+const { getReviewForPatch, getMultiAgentReviewForPatch } = await import(
+  "../extension/openaiApi.js"
+);
 
 describe("getReviewForPatch", () => {
   beforeEach(() => {
@@ -109,5 +111,55 @@ describe("getReviewForPatch", () => {
         prBody: "b",
       }),
     ).rejects.toThrow("OpenAI API: Authentication failed");
+  });
+});
+
+describe("getMultiAgentReviewForPatch", () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+  });
+
+  it("runs multiple reviews and synthesizes them", async () => {
+    const review1 = {
+      choices: [{ message: { content: JSON.stringify({ comments: [] }) } }],
+    };
+    const review2 = {
+      choices: [{ message: { content: JSON.stringify({ comments: [] }) } }],
+    };
+    const final = {
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({ comments: [{ line: 1, body: "x" }] }),
+          },
+        },
+      ],
+    };
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => review1,
+    });
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => review2,
+    });
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => final,
+    });
+
+    const res = await getMultiAgentReviewForPatch("d", {
+      openAIApiKey: "k",
+      openAIModel: "gpt",
+      maxTokens: 10,
+      temperature: 0,
+      agentCount: 2,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(res).toEqual({ comments: [{ line: 1, body: "x" }] });
   });
 });

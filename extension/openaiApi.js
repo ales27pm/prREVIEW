@@ -118,3 +118,65 @@ export async function getReviewForPatch(patch, config = {}) {
     throw new Error("AI returned malformed JSON in its response.");
   }
 }
+
+async function synthesizeFeedback(reviews, config = {}) {
+  const settings = await loadSettings();
+  const openAIApiKey = config.openAIApiKey || settings.openAIApiKey;
+  const model = config.synthModel || config.openAIModel;
+  const { maxTokens, temperature } = config;
+
+  const summaryPrompt =
+    "You are a senior reviewer tasked with consolidating feedback from multiple reviewers. " +
+    "Merge similar comments, prioritize important issues, and return the result as described.";
+
+  const userContent = reviews
+    .map((r, i) => `Review ${i + 1}: ${JSON.stringify(r)}`)
+    .join("\n");
+
+  const response = await fetch(OPENAI_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${openAIApiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: maxTokens,
+      temperature,
+      messages: [
+        { role: "system", content: summaryPrompt },
+        { role: "user", content: userContent },
+      ],
+      response_format: { type: "json_object" },
+    }),
+  });
+
+  if (response.status === 401) {
+    throw new Error("OpenAI API: Authentication failed. Check your API key.");
+  }
+  if (!response.ok) {
+    throw new Error(`OpenAI API: ${response.status} ${response.statusText}`);
+  }
+
+  const aiResponse = await response.json();
+
+  try {
+    const content = JSON.parse(aiResponse.choices[0].message.content);
+    return content && Array.isArray(content.comments)
+      ? content
+      : { comments: [] };
+  } catch (err) {
+    throw new Error("AI returned malformed JSON in its response.");
+  }
+}
+
+export async function getMultiAgentReviewForPatch(patch, config = {}) {
+  const agentCount =
+    Number.isInteger(config.agentCount) && config.agentCount > 0
+      ? config.agentCount
+      : 3;
+  const reviews = await Promise.all(
+    Array.from({ length: agentCount }, () => getReviewForPatch(patch, config)),
+  );
+  return synthesizeFeedback(reviews, config);
+}
