@@ -2,7 +2,7 @@
 
 This roadmap outlines the recommended steps to evolve the PR Review Assistant into a fully adaptive, context‑aware developer tool. It distills the key actions from the "Architectural and Strategic Analysis" report.
 
-## Phase 1: Foundational Improvements (0‑3 Months)
+## Phase 1: Foundational Improvements
 
 1. **Harden API Key Storage**
    - Store API keys using `chrome.storage.local` instead of `chrome.storage.sync`.
@@ -22,7 +22,7 @@ This roadmap outlines the recommended steps to evolve the PR Review Assistant in
 - Lint and tests pass after `content.js` refactor.
 - Benchmark prompt response quality before and after model‑specific formatting.
 
-## Phase 2: Architectural Evolution (3‑9 Months)
+## Phase 2: Architectural Evolution
 
 1. **Knowledge Graph–Enhanced RAG**
    - **Step 1:** extend the repository indexer (`indexRepo.js`) to capture a simple call graph.
@@ -45,7 +45,7 @@ This roadmap outlines the recommended steps to evolve the PR Review Assistant in
 - Feedback backend collects at least 100 ratings with analytics dashboards available.
 - Multi‑agent reflection reduces duplicate comments in synthetic benchmarks.
 
-## Phase 3: Advanced Intelligence (9‑18+ Months)
+## Phase 3: Advanced Intelligence
 
 1. **Parameter‑Efficient Fine‑Tuning (PEFT)**
    - Use the curated feedback dataset to fine‑tune open‑source code models with LoRA or similar techniques.
