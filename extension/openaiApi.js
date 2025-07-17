@@ -21,6 +21,16 @@ function truncateText(text, maxLength = MAX_METADATA_LENGTH) {
 import { loadSettings } from "./settings.js";
 import { loadIndex, getRelevantSnippets } from "./rag.js";
 
+/**
+ * Submits a unified diff patch to the OpenAI API for automated code review, optionally enriching the prompt with pull request metadata and relevant context snippets.
+ *
+ * If a vector index URL is provided in the config, retrieves additional context snippets related to the patch and includes them in the prompt. Handles API authentication, response validation, and error conditions. Returns the AI's reasoning and an array of inline review comments.
+ *
+ * @param {string} patch - The unified diff patch to be reviewed.
+ * @param {Object} [config] - Optional configuration including API key, model, prompt, PR metadata, and vector index URL.
+ * @returns {Promise<{reasoning: string, comments: Array<{line: number, body: string}>}>} The AI's reasoning and an array of inline comments for the patch.
+ * @throws {Error} If the OpenAI API key is missing, authentication fails, the API response is invalid, or the AI returns malformed JSON.
+ */
 export async function getReviewForPatch(patch, config = {}) {
   const settings = await loadSettings();
   const openAIApiKey = config.openAIApiKey || settings.openAIApiKey;

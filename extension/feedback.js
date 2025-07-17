@@ -13,6 +13,16 @@ function injectStyle() {
   styleInjected = true;
 }
 
+/**
+ * Records a new AI-generated review comment for feedback tracking in local storage.
+ * 
+ * Adds a comment entry with the specified repository and pull request details, initializing its rating and adoption status as null.
+ * @param {Object} params - The comment details.
+ * @param {string} params.owner - Repository owner.
+ * @param {string} params.repo - Repository name.
+ * @param {number} params.prNumber - Pull request number.
+ * @param {number|string} params.commentId - Unique identifier for the comment.
+ */
 export async function recordComment({ owner, repo, prNumber, commentId }) {
   try {
     const data = await chrome.storage.local.get(STORAGE_KEY);
@@ -51,6 +61,11 @@ export async function saveRating(commentId, rating) {
   }
 }
 
+/**
+ * Updates the adoption status of AI-generated review comments for a specific pull request.
+ *
+ * For each feedback record matching the given PR details, fetches the corresponding GitHub review comment and sets its `adopted` field to `true` if the comment's `position` is `null` (indicating the suggestion was adopted), or `false` otherwise. Saves the updated feedback data to local storage.
+ */
 async function updateAdoption(prDetails, token) {
   const data = await chrome.storage.local.get(STORAGE_KEY);
   const list = data[STORAGE_KEY] || [];
@@ -86,6 +101,15 @@ async function updateAdoption(prDetails, token) {
   }
 }
 
+/**
+ * Starts a periodic check to detect when a pull request is merged and updates adoption status for related AI-generated comments.
+ *
+ * Sets an interval to poll the GitHub API every 60 seconds for the merge status of the specified pull request. When the PR is detected as merged, the interval is cleared and `updateAdoption` is called to update feedback records for AI-generated comments on that PR.
+ *
+ * @param {Object} prDetails - Details identifying the pull request (owner, repo, prNumber).
+ * @param {string} token - GitHub API authentication token.
+ * @return {number} The interval ID for the periodic merge check.
+ */
 export function startMergeTracker(prDetails, token) {
   const interval = setInterval(async () => {
     try {
@@ -101,6 +125,13 @@ export function startMergeTracker(prDetails, token) {
   return interval;
 }
 
+/**
+ * Adds thumbs-up and thumbs-down feedback buttons to a comment body element for AI-generated suggestions.
+ * 
+ * If feedback buttons are not already present, creates and appends them to the specified comment body. Handles user clicks to record feedback ratings.
+ * @param {Element} bodyEl - The DOM element representing the comment body.
+ * @param {string|number} commentId - The identifier of the comment to associate feedback with.
+ */
 function addButtons(bodyEl, commentId) {
   injectStyle();
   if (bodyEl.querySelector(".ai-feedback-buttons")) return;
