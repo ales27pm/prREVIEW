@@ -2,6 +2,20 @@
 
 This roadmap outlines the recommended steps to evolve the PR Review Assistant into a fully adaptive, context‑aware developer tool. It distills the key actions from the "Architectural and Strategic Analysis" report.
 
+## Phase 0: Project Setup & Testing
+
+1. **Automated Test Pipeline**
+   - Configure a CI workflow that runs `npm test` on every pull request.
+2. **Contributor Onboarding**
+   - Expand the README with setup instructions and troubleshooting tips.
+3. **Sample Configuration**
+   - Provide example files showing how to store API keys locally during development.
+
+**Success metrics**
+
+- CI pipeline passes for all opened pull requests.
+- New contributors report a smooth setup experience.
+
 ## Phase 1: Foundational Improvements
 
 1. **Harden API Key Storage**
