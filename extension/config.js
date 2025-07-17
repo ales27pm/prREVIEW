@@ -34,16 +34,23 @@ export async function loadConfig() {
   try {
     const settings = await loadSettings();
 
-    if (!settings.githubToken || !settings.openAIApiKey) {
+    const githubToken =
+      settings.githubToken ||
+      (typeof process !== "undefined" ? process.env.GITHUB_TOKEN : undefined);
+    const openAIApiKey =
+      settings.openAIApiKey ||
+      (typeof process !== "undefined" ? process.env.OPENAI_API_KEY : undefined);
+
+    if (!githubToken || !openAIApiKey) {
       return {
         error:
-          "API keys are missing. Please configure them in the extension options.",
+          "API keys are missing. Provide them via environment variables or in the extension options.",
       };
     }
 
     return {
-      githubToken: settings.githubToken,
-      openAIApiKey: settings.openAIApiKey,
+      githubToken,
+      openAIApiKey,
       openAIModel: settings.openAIModel || DEFAULT_MODEL,
       maxTokens: settings.maxTokens || DEFAULT_MAX_TOKENS,
       temperature:

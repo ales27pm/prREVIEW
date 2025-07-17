@@ -1,6 +1,4 @@
 {
-  "githubToken": "ghp_your_token_here",
-  "openAIApiKey": "sk_your_openai_key_here",
   "openAIModel": "gpt-4o",
   "maxTokens": 1500,
   "temperature": 0.2,

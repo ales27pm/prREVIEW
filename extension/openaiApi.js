@@ -24,7 +24,10 @@ import { loadIndex, getRelevantSnippets } from "./rag.js";
 
 export async function getReviewForPatch(patch, config = {}) {
   const settings = await loadSettings();
-  const openAIApiKey = config.openAIApiKey || settings.openAIApiKey;
+  const openAIApiKey =
+    config.openAIApiKey ||
+    settings.openAIApiKey ||
+    (typeof process !== "undefined" ? process.env.OPENAI_API_KEY : undefined);
   const {
     openAIModel,
     systemPrompt,
@@ -122,7 +125,10 @@ export async function getReviewForPatch(patch, config = {}) {
 
 async function synthesizeFeedback(reviews, config = {}) {
   const settings = await loadSettings();
-  const openAIApiKey = config.openAIApiKey || settings.openAIApiKey;
+  const openAIApiKey =
+    config.openAIApiKey ||
+    settings.openAIApiKey ||
+    (typeof process !== "undefined" ? process.env.OPENAI_API_KEY : undefined);
   const model = config.synthModel || config.openAIModel || DEFAULT_MODEL;
   const { maxTokens = 512, temperature = 0.7 } = config;
 

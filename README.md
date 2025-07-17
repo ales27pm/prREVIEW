@@ -13,10 +13,10 @@ All extension code lives in the `extension/` folder.
    npm install
    ```
 
-2. **Configure API keys.** Copy `extension/settings.example.json` to
-   `extension/settings.local.json` and optionally `.env.example` to `.env`,
-   then fill in your GitHub and OpenAI credentials. These values are used only
-   during local development.
+2. **Configure API keys.** Copy `.env.example` to `.env` and add your GitHub and
+   OpenAI credentials. Copy `extension/settings.example.json` to
+   `extension/settings.local.json` for non-secret settings. The extension reads
+   tokens from environment variables so they are never stored in source control.
 
 3. **Format and test.** Use Prettier to format your code and run the test
    suite before committing:
@@ -35,7 +35,6 @@ All extension code lives in the `extension/` folder.
 - Ensure you are using a recent LTS version of Node (18+).
 - If `npm install` fails, delete `node_modules` and try again.
 - When the extension cannot find API keys, verify that
-  `settings.local.json` contains valid credentials or re-enter them via the
-  options page.
+  `.env` contains valid credentials or re-enter them via the options page.
 - Tests failing due to missing modules can often be fixed by running
   `npm install`.

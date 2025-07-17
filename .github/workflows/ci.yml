@@ -4,8 +4,6 @@ on:
   push:
     branches: ["main"]
   pull_request:
-    # Run tests for pull requests targeting any branch
-    branches: ["**"]
 
 jobs:
   build:
