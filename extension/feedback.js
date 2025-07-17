@@ -14,10 +14,15 @@ function injectStyle() {
 }
 
 export async function recordComment({ owner, repo, prNumber, commentId }) {
-  const data = await chrome.storage.local.get(STORAGE_KEY);
-  const list = data[STORAGE_KEY] || [];
-  list.push({ owner, repo, prNumber, commentId, rating: null, adopted: null });
-  await chrome.storage.local.set({ [STORAGE_KEY]: list });
+  try {
+    const data = await chrome.storage.local.get(STORAGE_KEY);
+    const list = data[STORAGE_KEY] || [];
+    list.push({ owner, repo, prNumber, commentId, rating: null, adopted: null });
+    await chrome.storage.local.set({ [STORAGE_KEY]: list });
+  } catch (error) {
+    console.error("Failed to record comment", error);
+    throw error;
+  }
 }
 
 export async function saveRating(commentId, rating) {
