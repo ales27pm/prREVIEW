@@ -2,9 +2,10 @@ name: NodeJS CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    # Run tests for pull requests targeting any branch
+    branches: ["**"]
 
 jobs:
   build:
@@ -15,14 +16,14 @@ jobs:
         node-version: [18.x, 20.x, 22.x]
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
 
-    - name: Install Dependencies and Run Tests
-      run: |
-        npm install
-        npm test
+      - name: Install Dependencies and Run Tests
+        run: |
+          npm install
+          npm test
