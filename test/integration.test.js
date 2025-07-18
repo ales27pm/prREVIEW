@@ -23,6 +23,9 @@ jest.unstable_mockModule("../extension/config.js", () => ({
     concurrencyLimit: 5,
     error: null,
   }),
+  getRagMode: jest.fn().mockResolvedValue("performance"),
+  setRagMode: jest.fn(),
+  AVAILABLE_MODES: ["performance", "security", "test"],
 }));
 jest.unstable_mockModule("../extension/ui.js", () => ({
   createStatusIndicator: jest.fn(),

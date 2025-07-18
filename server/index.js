@@ -2,10 +2,14 @@ import express from "express";
 import fs from "fs/promises";
 import path from "path";
 import cors from "cors";
+import metricsRouter from "./metrics.js";
+import suggestRouter from "./suggest.js";
 
 const app = express();
 app.use(express.json());
 app.use(cors());
+app.use("/metrics", metricsRouter);
+app.use("/suggest", suggestRouter);
 
 const DATA_FILE = process.env.FEEDBACK_FILE || "feedbackData.json";
 
