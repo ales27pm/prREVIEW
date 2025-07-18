@@ -25,6 +25,7 @@ jest.unstable_mockModule("../extension/config.js", () => ({
   }),
   getRagMode: jest.fn().mockResolvedValue("performance"),
   setRagMode: jest.fn(),
+  AVAILABLE_MODES: ["performance", "security", "test"],
 }));
 jest.unstable_mockModule("../extension/ui.js", () => ({
   createStatusIndicator: jest.fn(),

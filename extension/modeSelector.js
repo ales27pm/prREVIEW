@@ -1,4 +1,4 @@
-import { getRagMode, setRagMode } from "./config.js";
+import { getRagMode, setRagMode, AVAILABLE_MODES } from "./config.js";
 
 export async function injectModeSelector() {
   const container = document.querySelector(".gh-header-actions");
@@ -8,17 +8,26 @@ export async function injectModeSelector() {
   wrapper.style.marginRight = "8px";
 
   const select = document.createElement("select");
-  for (const mode of ["performance", "security", "test"]) {
+  for (const mode of AVAILABLE_MODES) {
     const opt = document.createElement("option");
     opt.value = mode;
     opt.textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
     select.appendChild(opt);
   }
 
-  select.value = await getRagMode();
+  try {
+    select.value = await getRagMode();
+  } catch (err) {
+    console.error("Failed to load RAG mode", err);
+  }
+
   select.addEventListener("change", async () => {
-    await setRagMode(select.value);
-    window.location.reload();
+    try {
+      await setRagMode(select.value);
+      window.location.reload();
+    } catch (err) {
+      console.error("Failed to set RAG mode", err);
+    }
   });
 
   wrapper.appendChild(select);

@@ -1,10 +1,30 @@
 export async function generateSuggestion({ subgraph, mode }) {
-  const results = subgraph.nodes.slice(0, 1).map((n) => ({
+  if (!subgraph?.nodes?.length) {
+    return [];
+  }
+
+  return subgraph.nodes.map((n) => ({
     file: n.file || "",
     before: n.text || "",
-    after: n.text || "",
-    // TODO: Replace with a meaningful scoring metric. Using 0 as a placeholder for now.
-    score: 0,
+    after: generateImprovement(n.text || "", mode),
+    score: calculateRelevanceScore(n, mode),
   }));
-  return results;
+}
+
+function generateImprovement(text, mode) {
+  switch (mode) {
+    case "performance":
+      return `${text}\n// TODO: optimize performance`;
+    case "security":
+      return `${text}\n// TODO: address security concern`;
+    case "test":
+      return `${text}\n// TODO: add tests`;
+    default:
+      return text;
+  }
+}
+
+function calculateRelevanceScore(node, _mode) {
+  const len = (node.text || "").length;
+  return Math.min(1, len / 1000);
 }

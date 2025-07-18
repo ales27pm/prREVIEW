@@ -1,29 +1,46 @@
 import express from "express";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import { v4 as uuid } from "uuid";
 
 const router = express.Router();
-const DB_FILE = path.join(process.cwd(), "metrics.json");
-let db = { events: [] };
+const DB_FILE = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "metrics.json",
+);
+const db = { events: [] };
 
-if (fs.existsSync(DB_FILE)) {
+try {
+  if (fs.existsSync(DB_FILE)) {
+    db.events = JSON.parse(fs.readFileSync(DB_FILE, "utf8")).events || [];
+  }
+} catch (err) {
+  console.error("Failed to load metrics DB", err);
+}
+
+async function save() {
   try {
-    db = JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
+    await fs.promises.writeFile(DB_FILE, JSON.stringify(db, null, 2));
   } catch (err) {
-    console.error("Failed to parse metrics DB", err);
+    console.error("Failed to save metrics DB", err);
   }
 }
 
-function save() {
-  fs.promises
-    .writeFile(DB_FILE, JSON.stringify(db, null, 2))
-    .catch((err) => console.error("Failed to save metrics DB", err));
-}
+const MAX_EVENTS = 1000;
 
 router.post("/", express.json(), async (req, res) => {
-  const e = { id: uuid(), timestamp: new Date().toISOString(), ...req.body };
+  const { event, pr, user } = req.body || {};
+  if (typeof event !== "string") {
+    return res.status(400).json({ error: "Invalid payload" });
+  }
+  const e = { id: uuid(), timestamp: new Date().toISOString(), event };
+  if (pr) e.pr = pr;
+  if (user) e.user = user;
   db.events.push(e);
+  if (db.events.length > MAX_EVENTS) {
+    db.events.shift();
+  }
   await save();
   res.status(201).json(e);
 });

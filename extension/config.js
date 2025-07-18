@@ -46,6 +46,8 @@ function getPrompt(map, key) {
 import { loadSettings } from "./settings.js";
 import * as storage from "./storage.js";
 
+export const AVAILABLE_MODES = ["performance", "security", "test"];
+
 const MODE_KEY = "prreview_rag_mode";
 const DEFAULT_MODE = "performance";
 
@@ -108,7 +110,7 @@ export async function getRagMode() {
 }
 
 export async function setRagMode(mode) {
-  if (!["performance", "security", "test"].includes(mode)) {
+  if (!AVAILABLE_MODES.includes(mode)) {
     throw new Error(`Unknown mode "${mode}"`);
   }
   await storage.set(MODE_KEY, mode);

@@ -173,17 +173,32 @@ export function observeComments() {
 }
 
 export async function fetchSuggestions() {
-  const mode = await getRagMode();
-  const config = await loadConfig();
-  const response = await fetch(`${config.feedbackUrl}/suggest`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ mode }),
-  });
-  const data = await response.json();
-  const enriched = (data.suggestions || []).map((s) => ({
-    ...s,
-    diff: generateAstDiff(s.before, s.after, s.file),
-  }));
-  return enriched.sort((a, b) => b.score - a.score);
+  try {
+    const mode = await getRagMode();
+    const config = await loadConfig();
+    const response = await fetch(`${config.feedbackUrl}/suggest`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode }),
+    });
+    if (!response.ok) {
+      throw new Error(`Suggest API failed: ${response.status}`);
+    }
+    const data = await response.json();
+    const enriched = (data.suggestions || []).map((s) => {
+      try {
+        return {
+          ...s,
+          diff: generateAstDiff(s.before, s.after, s.file),
+        };
+      } catch (err) {
+        console.error("Failed to diff suggestion", err);
+        return { ...s, diff: "" };
+      }
+    });
+    return enriched.sort((a, b) => b.score - a.score);
+  } catch (err) {
+    console.error("Failed to fetch suggestions", err);
+    return [];
+  }
 }
