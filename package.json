@@ -22,7 +22,8 @@
     "diff": "^8.0.2",
     "express": "^4.19.2",
     "recast": "^0.23.11",
-    "uuid": "^11.1.0"
+    "uuid": "^11.1.0",
+    "@octokit/rest": "^20.0.0"
   },
   "jest": {
     "testEnvironment": "jest-environment-jsdom",

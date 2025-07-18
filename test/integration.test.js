@@ -3,7 +3,11 @@ import { setupChrome, resetChrome } from "./chromeMock.js";
 
 // Mock modules used by content.js
 jest.unstable_mockModule("../extension/openaiApi.js", () => ({
-  getMultiAgentReviewForPatch: jest.fn().mockResolvedValue({ comments: [] }),
+  getReviewForPatch: jest.fn().mockResolvedValue({ suggestions: [] }),
+}));
+jest.unstable_mockModule("../extension/content/githubService.js", () => ({
+  getPageDiff: jest.fn().mockResolvedValue("diff"),
+  postReviewComments: jest.fn(),
 }));
 jest.unstable_mockModule("../extension/githubApi.js", () => ({
   fetchAllPRFiles: jest
@@ -27,6 +31,9 @@ jest.unstable_mockModule("../extension/config.js", () => ({
   setRagMode: jest.fn(),
   AVAILABLE_MODES: ["performance", "security", "test"],
 }));
+jest.unstable_mockModule("../extension/settings.js", () => ({
+  loadSettings: jest.fn().mockResolvedValue({ enableAutoComment: false }),
+}));
 jest.unstable_mockModule("../extension/ui.js", () => ({
   createStatusIndicator: jest.fn(),
   updateStatus: jest.fn(),
@@ -47,7 +54,7 @@ test("popup click triggers OpenAI call", async () => {
   // Load background and content scripts
   await import("../extension/background.js");
   global.__loadingContent = true;
-  await import("../extension/content.js");
+  await import("../extension/content/content.js");
   global.__loadingContent = undefined;
 
   document.body.innerHTML =
@@ -58,12 +65,10 @@ test("popup click triggers OpenAI call", async () => {
   await Promise.resolve();
 
   expect(chrome.tabs.query).toHaveBeenCalled();
-  expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(
-    1,
-    { action: "run_review", prDetails: { owner: "a", repo: "b", prNumber: 1 } },
-    expect.any(Function),
-  );
+  expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(1, {
+    action: "RUN_REVIEW",
+  });
 
   const openai = await import("../extension/openaiApi.js");
-  expect(openai.getMultiAgentReviewForPatch).toHaveBeenCalled();
+  expect(openai.getReviewForPatch).toHaveBeenCalled();
 });
