@@ -19,7 +19,7 @@ import { loadSettings } from "../settings.js";
 
 export async function postReviewComments(comments) {
   const settings = await loadSettings();
-  const octo = new Octokit({ auth: settings.openAIApiKey });
+  const octo = new Octokit({ auth: settings.githubToken });
   const { owner, repo, number } = parsePRfromURL(location.href);
   for (const comment of comments) {
     await octo.pulls.createReview({
@@ -31,7 +31,17 @@ export async function postReviewComments(comments) {
   }
 }
 
+/**
+ * Parses a GitHub PR URL and extracts the owner, repo, and PR number.
+ * Supports both github.com and enterprise GitHub URLs.
+ * Returns { owner, repo, number } or throws if the URL is invalid.
+ */
 function parsePRfromURL(url) {
-  const [, , owner, repo, , pr] = new URL(url).pathname.split("/");
+  const pathname = new URL(url).pathname;
+  const match = pathname.match(/^\/([^\/]+)\/([^\/]+)\/pulls?\/(\d+)(\/|$)/);
+  if (!match) {
+    throw new Error(`Invalid GitHub PR URL: ${url}`);
+  }
+  const [, owner, repo, pr] = match;
   return { owner, repo, number: Number(pr) };
 }
