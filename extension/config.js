@@ -34,6 +34,10 @@ const MODE_PROMPTS = {
     "You are a test generation assistant. Suggest missing tests and provide example diffs to add them.",
 };
 
+function getPrompt(map, key) {
+  return key && Object.hasOwn(map, key) ? map[key] : null;
+}
+
 /**
  * Retrieves the application configuration from Chrome local storage, applying default values for optional settings and validating the presence of required API keys.
  * @returns {Promise<AppConfig>} Resolves to the configuration object, or an error message if required keys are missing or loading fails.
@@ -58,20 +62,9 @@ export async function loadConfig() {
       };
     }
 
-    const reviewMode = settings.reviewMode || "default";
-    const personaPrompt =
-      settings.reviewPersona &&
-      Object.prototype.hasOwnProperty.call(
-        PERSONA_PROMPTS,
-        settings.reviewPersona,
-      )
-        ? PERSONA_PROMPTS[settings.reviewPersona]
-        : null;
-    const modePrompt =
-      reviewMode &&
-      Object.prototype.hasOwnProperty.call(MODE_PROMPTS, reviewMode)
-        ? MODE_PROMPTS[reviewMode]
-        : null;
+    const reviewMode = settings.reviewMode || "";
+    const personaPrompt = getPrompt(PERSONA_PROMPTS, settings.reviewPersona);
+    const modePrompt = getPrompt(MODE_PROMPTS, reviewMode);
 
     return {
       githubToken,

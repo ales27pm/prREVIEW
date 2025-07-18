@@ -37,9 +37,15 @@ def main():
     model = get_peft_model(model, lora)
 
     def tokenize(example):
-        return tokenizer(example["prompt"], text_target=example["completion"], truncation=True)
+        return tokenizer(
+            example["prompt"],
+            text_target=example["completion"],
+            max_length=512,
+            padding="max_length",
+            truncation=True,
+        )
 
-    tokenized = ds.map(tokenize)
+    tokenized = ds.map(tokenize, batched=True)
 
     training_args = TrainingArguments(
         output_dir=args.output,
