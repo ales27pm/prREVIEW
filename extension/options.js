@@ -13,6 +13,7 @@ const maxTokensInput = document.getElementById("maxTokens");
 const temperatureInput = document.getElementById("temperature");
 const reviewPersonaInput = document.getElementById("reviewPersona");
 const reviewModeInput = document.getElementById("reviewMode");
+const enableAutoCommentInput = document.getElementById("enableAutoComment");
 const statusElement = document.getElementById("form-status");
 
 let statusTimeout;
@@ -61,6 +62,7 @@ async function displaySettings() {
     if (settings.reviewMode) {
       reviewModeInput.value = settings.reviewMode;
     }
+    enableAutoCommentInput.checked = !!settings.enableAutoComment;
   } catch (error) {
     console.error("Failed to load settings:", error);
     showStatus("Error loading settings.", "error");
@@ -79,6 +81,7 @@ async function saveFormSettings() {
   const temperature = parseFloat(temperatureInput.value);
   const reviewPersona = reviewPersonaInput.value;
   const reviewMode = reviewModeInput.value;
+  const enableAutoComment = enableAutoCommentInput.checked;
 
   if (!githubToken || !openAIApiKey) {
     showStatus("Both GitHub Token and OpenAI API Key are required.", "error");
@@ -110,6 +113,7 @@ async function saveFormSettings() {
       temperature,
       reviewPersona,
       reviewMode,
+      enableAutoComment,
     });
     showStatus("Settings saved successfully!");
   } catch (error) {

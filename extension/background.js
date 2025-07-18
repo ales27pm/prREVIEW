@@ -1,7 +1,10 @@
 // extension/background.js
+import { getPageDiff, postReviewComments } from "./content/githubService.js";
+import { getReviewForPatch } from "./llmApi.js";
+import { loadSettings } from "./settings.js";
 import { getPRDetails } from "./utils.js";
 
-// Create a context menu item for GitHub PR pages.
+// Existing context menu to start review from page or toolbar
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: "review-pr",
@@ -11,53 +14,42 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-/**
- * Initiates the AI review process on a GitHub pull request page by sending a message to the content script in the specified tab.
- *
- * If the provided tab corresponds to a valid GitHub PR page, a message with PR details is sent to trigger the review. Logs a message if the tab is not a valid PR page or if message delivery fails.
- */
 function startReview(tab) {
   const prDetails = getPRDetails(tab.url);
   if (tab.id && prDetails) {
-    chrome.tabs.sendMessage(
-      tab.id,
-      {
-        action: "run_review",
-        prDetails: prDetails,
-      },
-      (response) => {
-        if (chrome.runtime.lastError) {
-          console.error(
-            "Failed to send message:",
-            chrome.runtime.lastError.message,
-          );
-        }
-      },
-    );
-  } else {
-    console.log("Not a valid PR page.");
+    chrome.tabs.sendMessage(tab.id, { action: "RUN_REVIEW" });
   }
 }
 
-// Listen for clicks on the context menu.
 chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId === "review-pr") {
-    startReview(tab);
+  if (info.menuItemId === "review-pr") startReview(tab);
+});
+chrome.action.onClicked.addListener((tab) => startReview(tab));
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.action === "RUN_REVIEW") {
+    handleReview()
+      .then((suggestions) => sendResponse({ suggestions }))
+      .catch((err) => sendResponse({ error: err.message }));
+    return true;
   }
-});
-
-// Listen for clicks on the extension's action icon (toolbar button).
-chrome.action.onClicked.addListener((tab) => {
-  startReview(tab);
-});
-
-// Handle messages from popup
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === "trigger_review_from_popup") {
+  if (msg.action === "trigger_review_from_popup") {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (tabs[0]) {
-        startReview(tabs[0]);
-      }
+      if (tabs[0]) startReview(tabs[0]);
     });
   }
 });
+
+export async function handleReview() {
+  try {
+    const diff = await getPageDiff();
+    const review = await getReviewForPatch(diff);
+    const settings = await loadSettings();
+    if (settings.enableAutoComment && Array.isArray(review.suggestions)) {
+      await postReviewComments(review.suggestions);
+    }
+    return review.suggestions || [];
+  } catch (err) {
+    console.error("handleReview failed", err);
+    throw err;
+  }
+}

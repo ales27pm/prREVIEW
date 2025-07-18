@@ -3,7 +3,13 @@
   "name": "PR Review Assistant",
   "version": "0.1.0",
   "description": "AI-powered GitHub PR review tool",
-  "permissions": ["storage", "activeTab", "contextMenus"],
+  "permissions": [
+    "clipboardRead",
+    "storage",
+    "activeTab",
+    "contextMenus",
+    "scripting"
+  ],
   "host_permissions": ["https://github.com/*"],
   "background": {
     "service_worker": "background.js",
@@ -14,8 +20,8 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://github.com/*"],
-      "js": ["content.js"]
+      "matches": ["https://github.com/*/*/pull/*"],
+      "js": ["content/ui.js", "content/githubService.js", "content/content.js"]
     }
   ],
   "options_page": "options.html"
