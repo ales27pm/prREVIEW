@@ -1,4 +1,6 @@
 const GITHUB_API_URL = "https://api.github.com";
+import { parsePatch, applyPatch as applyTextPatch } from "diff";
+import { loadConfig } from "./config.js";
 export const SUMMARY_HEADER = "<!-- ai-review-summary -->";
 
 /**
@@ -213,31 +215,108 @@ export async function getReviewComment({ owner, repo, commentId }, token) {
   return handleGitHubResponse(res);
 }
 
+function toBase64(str) {
+  if (typeof Buffer !== "undefined") {
+    return Buffer.from(str, "utf8").toString("base64");
+  }
+  return btoa(unescape(encodeURIComponent(str)));
+}
+
 export async function applyPatch({ owner, repo, prNumber, token, patchText }) {
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/vnd.github.v3+json",
+  };
+
   const pr = await fetch(
     `${GITHUB_API_URL}/repos/${owner}/${repo}/pulls/${prNumber}`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github.v3+json",
-      },
-    },
-  ).then((r) => r.json());
+    { headers },
+  ).then(handleGitHubResponse);
 
-  const blob = await fetch(
-    `${GITHUB_API_URL}/repos/${owner}/${repo}/git/blobs`,
+  const headSha = pr.head.sha;
+  const branch = pr.head.ref;
+
+  const headCommit = await fetch(
+    `${GITHUB_API_URL}/repos/${owner}/${repo}/git/commits/${headSha}`,
+    { headers },
+  ).then(handleGitHubResponse);
+
+  const baseTree = await fetch(
+    `${GITHUB_API_URL}/repos/${owner}/${repo}/git/trees/${headCommit.tree.sha}?recursive=1`,
+    { headers },
+  ).then(handleGitHubResponse);
+
+  const patches = parsePatch(patchText);
+  const treeUpdates = [];
+
+  for (const p of patches) {
+    const pathName = p.newFileName || p.oldFileName;
+    const entry = baseTree.tree.find((t) => t.path === pathName);
+    let original = "";
+    if (entry) {
+      const blob = await fetch(
+        `${GITHUB_API_URL}/repos/${owner}/${repo}/git/blobs/${entry.sha}`,
+        { headers },
+      ).then(handleGitHubResponse);
+      original = Buffer.from(blob.content, "base64").toString("utf8");
+    }
+    const updated = applyTextPatch(original, p);
+    const newBlob = await fetch(
+      `${GITHUB_API_URL}/repos/${owner}/${repo}/git/blobs`,
+      {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: toBase64(updated),
+          encoding: "base64",
+        }),
+      },
+    ).then(handleGitHubResponse);
+    treeUpdates.push({
+      path: pathName,
+      mode: "100644",
+      type: "blob",
+      sha: newBlob.sha,
+    });
+  }
+
+  const newTree = await fetch(
+    `${GITHUB_API_URL}/repos/${owner}/${repo}/git/trees`,
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github.v3+json",
-      },
-      body: JSON.stringify({ content: btoa(patchText), encoding: "base64" }),
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        base_tree: headCommit.tree.sha,
+        tree: treeUpdates,
+      }),
     },
-  ).then((r) => r.json());
+  ).then(handleGitHubResponse);
 
-  await fetch(`${GITHUB_API_URL}/metrics`, {
+  const newCommit = await fetch(
+    `${GITHUB_API_URL}/repos/${owner}/${repo}/git/commits`,
+    {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Apply AI suggestion",
+        tree: newTree.sha,
+        parents: [headSha],
+      }),
+    },
+  ).then(handleGitHubResponse);
+
+  await fetch(
+    `${GITHUB_API_URL}/repos/${owner}/${repo}/git/refs/heads/${branch}`,
+    {
+      method: "PATCH",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ sha: newCommit.sha }),
+    },
+  ).then(handleGitHubResponse);
+
+  const config = await loadConfig();
+  const metricsUrl = `${config.feedbackUrl.replace(/\/feedback$/, "")}/metrics`;
+  await fetch(metricsUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -247,5 +326,5 @@ export async function applyPatch({ owner, repo, prNumber, token, patchText }) {
     }),
   });
 
-  return blob;
+  return newCommit;
 }

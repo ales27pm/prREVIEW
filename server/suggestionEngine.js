@@ -3,7 +3,8 @@ export async function generateSuggestion({ subgraph, mode }) {
     file: n.file || "",
     before: n.text || "",
     after: n.text || "",
-    score: Math.random(),
+    // TODO: Replace with a meaningful scoring metric. Using 0 as a placeholder for now.
+    score: 0,
   }));
   return results;
 }

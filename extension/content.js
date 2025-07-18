@@ -18,6 +18,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 if (!globalThis.__loadingContent) {
+  globalThis.__loadingContent = true;
   injectModeSelector().catch(console.error);
 }
 
