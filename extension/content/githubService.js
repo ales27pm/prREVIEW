@@ -21,14 +21,14 @@ export async function postReviewComments(comments) {
   const settings = await loadSettings();
   const octo = new Octokit({ auth: settings.githubToken });
   const { owner, repo, number } = parsePRfromURL(location.href);
-  for (const comment of comments) {
-    await octo.pulls.createReview({
-      owner,
-      repo,
-      pull_number: number,
-      body: comment,
-    });
-  }
+  if (!comments || comments.length === 0) return;
+  await octo.pulls.createReview({
+    owner,
+    repo,
+    pull_number: number,
+    event: "COMMENT",
+    comments: comments.map((body) => ({ body })),
+  });
 }
 
 /**

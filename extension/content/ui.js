@@ -60,8 +60,15 @@ export function showSuggestions(suggestions) {
     const discussion = document.querySelector(".discussion-timeline-actions");
     discussion && discussion.before(panel);
   }
-  panel.innerHTML = `<h3>AI Review Suggestions</h3>
-    ${suggestions.map((s) => `<p>• ${s}</p>`).join("")}`;
+  panel.textContent = "";
+  const header = document.createElement("h3");
+  header.textContent = "AI Review Suggestions";
+  panel.appendChild(header);
+  suggestions.forEach((s) => {
+    const p = document.createElement("p");
+    p.textContent = `• ${s}`;
+    panel.appendChild(p);
+  });
 }
 
 /**

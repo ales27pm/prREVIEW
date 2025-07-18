@@ -3,7 +3,7 @@ import { setupChrome, resetChrome } from "./chromeMock.js";
 
 // Mock modules used by content.js
 jest.unstable_mockModule("../extension/openaiApi.js", () => ({
-  getReviewForPatch: jest.fn().mockResolvedValue({ suggestions: [] }),
+  getReviewForPatch: jest.fn().mockResolvedValue({ comments: [] }),
 }));
 jest.unstable_mockModule("../extension/content/githubService.js", () => ({
   getPageDiff: jest.fn().mockResolvedValue("diff"),

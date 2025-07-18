@@ -40,11 +40,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 export async function handleReview() {
-  const diff = await getPageDiff();
-  const review = await getReviewForPatch(diff);
-  const settings = await loadSettings();
-  if (settings.enableAutoComment && Array.isArray(review.comments)) {
-    await postReviewComments(review.comments);
+  try {
+    const diff = await getPageDiff();
+    const review = await getReviewForPatch(diff);
+    const settings = await loadSettings();
+    if (settings.enableAutoComment && Array.isArray(review.suggestions)) {
+      await postReviewComments(review.suggestions);
+    }
+    return review.suggestions || [];
+  } catch (err) {
+    console.error("handleReview failed", err);
+    throw err;
   }
-  return review.suggestions || [];
 }
