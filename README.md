@@ -40,3 +40,33 @@ All extension code lives in the `extension/` folder.
   `.env` contains valid credentials or re-enter them via the options page.
 - Tests failing due to missing modules can often be fixed by running
   `npm install`.
+
+### Advanced Model Fine-tuning
+
+The `training/peft_train.py` script demonstrates how to fine-tune an open-source model using LoRA and the curated feedback dataset.
+
+**Prerequisites:**
+
+```bash
+pip install transformers datasets peft torch
+```
+
+**Data Format:**
+
+The dataset should be a JSON array of records with `prompt`, `completion`, and `adopted` fields. Example:
+
+```json
+[
+  {
+    "prompt": "Review this code: function add(a, b) { return a + b; }",
+    "completion": "This function looks good. Consider adding type annotations.",
+    "adopted": true
+  }
+]
+```
+
+**Usage:**
+
+```bash
+python training/peft_train.py data/feedback.json codellama/CodeLlama-7b-hf adapters/
+```

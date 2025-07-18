@@ -86,7 +86,10 @@ async function runReviewFlow(prDetails) {
             feedback.comments.length > 0
           ) {
             for (const comment of feedback.comments) {
-              const body = `AI Suggestion: ${comment.body}`;
+              let body = `AI Suggestion: ${comment.body}`;
+              if (comment.suggestedDiff) {
+                body += `\n\n\u0060\u0060\u0060suggestion\n${comment.suggestedDiff}\n\u0060\u0060\u0060`;
+              }
               const postedComment = await github.postComment({
                 prDetails,
                 token: config.githubToken,
