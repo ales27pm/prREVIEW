@@ -3,6 +3,7 @@ import * as ui from "./ui.js";
 import * as github from "./githubApi.js";
 import * as openai from "./openaiApi.js";
 import { loadConfig } from "./config.js";
+import { injectModeSelector } from "./modeSelector.js";
 import * as feedback from "./feedback.js";
 import pLimit from "./p-limit.js";
 
@@ -15,6 +16,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
   return true;
 });
+
+if (!globalThis.__loadingContent) {
+  injectModeSelector().catch(console.error);
+}
 
 /**
  * Runs the AI-powered code review flow for a given GitHub pull request.

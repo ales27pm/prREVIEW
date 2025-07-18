@@ -70,3 +70,18 @@ The dataset should be a JSON array of records with `prompt`, `completion`, and `
 ```bash
 python training/peft_train.py data/feedback.json codellama/CodeLlama-7b-hf adapters/
 ```
+
+## Phase 3: One-Click Code Suggestions
+
+1. **Mode Selector**  
+   Use the dropdown in the PR header to switch between Performance, Security, or Test modes.
+2. **Viewing Suggestions**  
+   After selecting a mode, suggestions auto-refresh. Each block shows an AST-aware diff.
+3. **Apply a Suggestion**  
+   Click “Apply” to patch your branch directly via GitHub API.
+4. **Metrics & Adoption**  
+   We record `suggestion_displayed`, `suggestion_clicked`, and `patch_applied` events.
+   Retrieve usage stats:
+   ```bash
+   curl http://localhost:3000/metrics/report
+   ```

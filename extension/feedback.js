@@ -1,6 +1,7 @@
 // extension/feedback.js
 import * as github from "./githubApi.js";
-import { loadConfig } from "./config.js";
+import { loadConfig, getRagMode } from "./config.js";
+import { generateAstDiff } from "./utils/astDiff.js";
 
 const STORAGE_KEY = "aiFeedback";
 let styleInjected = false;
@@ -169,4 +170,20 @@ export function observeComments() {
   const observer = new MutationObserver(attachButtons);
   observer.observe(document.body, { childList: true, subtree: true });
   return observer;
+}
+
+export async function fetchSuggestions() {
+  const mode = await getRagMode();
+  const config = await loadConfig();
+  const response = await fetch(`${config.feedbackUrl}/suggest`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode }),
+  });
+  const data = await response.json();
+  const enriched = (data.suggestions || []).map((s) => ({
+    ...s,
+    diff: generateAstDiff(s.before, s.after, s.file),
+  }));
+  return enriched.sort((a, b) => b.score - a.score);
 }

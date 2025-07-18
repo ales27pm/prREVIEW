@@ -212,3 +212,40 @@ export async function getReviewComment({ owner, repo, commentId }, token) {
   );
   return handleGitHubResponse(res);
 }
+
+export async function applyPatch({ owner, repo, prNumber, token, patchText }) {
+  const pr = await fetch(
+    `${GITHUB_API_URL}/repos/${owner}/${repo}/pulls/${prNumber}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github.v3+json",
+      },
+    },
+  ).then((r) => r.json());
+
+  const blob = await fetch(
+    `${GITHUB_API_URL}/repos/${owner}/${repo}/git/blobs`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github.v3+json",
+      },
+      body: JSON.stringify({ content: btoa(patchText), encoding: "base64" }),
+    },
+  ).then((r) => r.json());
+
+  await fetch(`${GITHUB_API_URL}/metrics`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      event: "patch_applied",
+      pr: prNumber,
+      user: pr.user.login,
+    }),
+  });
+
+  return blob;
+}

@@ -44,6 +44,10 @@ function getPrompt(map, key) {
  * @returns {Promise<AppConfig>} Resolves to the configuration object, or an error message if required keys are missing or loading fails.
  */
 import { loadSettings } from "./settings.js";
+import * as storage from "./storage.js";
+
+const MODE_KEY = "prreview_rag_mode";
+const DEFAULT_MODE = "performance";
 
 export async function loadConfig() {
   try {
@@ -96,4 +100,16 @@ export async function loadConfig() {
       error: "Could not load extension settings. Please try again.",
     };
   }
+}
+
+export async function getRagMode() {
+  const mode = await storage.get(MODE_KEY);
+  return mode || DEFAULT_MODE;
+}
+
+export async function setRagMode(mode) {
+  if (!["performance", "security", "test"].includes(mode)) {
+    throw new Error(`Unknown mode "${mode}"`);
+  }
+  await storage.set(MODE_KEY, mode);
 }
