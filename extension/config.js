@@ -7,6 +7,7 @@
  * @property {number} temperature
  * @property {string} systemPrompt
  * @property {string} [reviewPersona]
+ * @property {string} [reviewMode]
  * @property {number} concurrencyLimit
  * @property {string} [vectorIndexUrl]
  * @property {string} [feedbackUrl]

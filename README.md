@@ -43,7 +43,29 @@ All extension code lives in the `extension/` folder.
 
 ### Advanced Model Fine-tuning
 
-The `training/peft_train.py` script demonstrates how to fine-tune an open-source model using LoRA and the curated feedback dataset. It expects records with `prompt`, `completion` and `adopted` fields and saves the adapter weights to the specified output directory:
+The `training/peft_train.py` script demonstrates how to fine-tune an open-source model using LoRA and the curated feedback dataset.
+
+**Prerequisites:**
+
+```bash
+pip install transformers datasets peft torch
+```
+
+**Data Format:**
+
+The dataset should be a JSON array of records with `prompt`, `completion`, and `adopted` fields. Example:
+
+```json
+[
+  {
+    "prompt": "Review this code: function add(a, b) { return a + b; }",
+    "completion": "This function looks good. Consider adding type annotations.",
+    "adopted": true
+  }
+]
+```
+
+**Usage:**
 
 ```bash
 python training/peft_train.py data/feedback.json codellama/CodeLlama-7b-hf adapters/
