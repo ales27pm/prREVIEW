@@ -55,7 +55,7 @@ This roadmap outlines the recommended steps to evolve the PR Review Assistant in
    - **Step 3:** store the graph alongside vector embeddings and expose a query API.
    - **Step 4:** update `rag.js` to retrieve context via graph traversal.
 
-2. **Feedback Backend & Analytics** — _partially implemented_
+2. **Feedback Backend & Analytics** — _implemented_
    - Build a backend service to collect explicit ratings and adoption data from `feedback.js`.
    - Provide dashboards or exports for analyzing the feedback.
    - Prepare curated datasets for model fine-tuning.
