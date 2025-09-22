@@ -1,13 +1,14 @@
 # Repo Guidelines
 
-This repository contains a Chrome extension that provides AI-powered pull request reviews.
+This repository hosts the WiFi Handshake Capture React Native application.
 
 ## Development
-- Use plain JavaScript for extension scripts.
-- Place all extension code in the `extension/` directory.
-- Format code with Prettier (`npx prettier --write .`).
-- Run `npm test` before committing.
+- All application code lives in the `wifi-handshake-c/` directory.
+- Keep implementations production-ready—avoid placeholders and incomplete flows.
+- Use TypeScript-friendly React Native patterns and keep components strongly typed.
+
+## Formatting
+- Format code with Prettier when touching files (`npx prettier --write <files>`).
 
 ## Testing
-- `npm test` runs a two-stage process. First, it runs Prettier in check mode to ensure all code is correctly formatted. If that passes, it executes the Jest test suite.
-- Future tests may be added under `test/`.
+- From the `wifi-handshake-c/` directory run `npm run lint` and `npm test` before committing.
