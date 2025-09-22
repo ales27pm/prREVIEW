@@ -1,87 +1,43 @@
-# PR Review Extension
+# WiFi Handshake Capture
 
-This project hosts a Chrome extension that uses AI to review GitHub pull requests.
-All extension code lives in the `extension/` folder.
+This repository contains the **WiFi Handshake Capture** React Native application. The app scans for nearby Wi-Fi networks and walks an operator through collecting handshake captures for offline analysis. All source code lives in the [`wifi-handshake-c/`](wifi-handshake-c/) directory.
 
-## Getting Started
+## Project structure
 
-1. **Clone the repository** and install dependencies:
+```
+wifi-handshake-c/
+├── App.tsx                # Application entry point
+├── src/                   # Reusable hooks, components and services
+├── ios/                   # Native iOS workspace and configuration
+├── metro.config.js        # Metro bundler configuration
+└── tsconfig.json          # TypeScript compiler options
+```
+
+## Getting started
+
+1. **Install dependencies**
 
    ```bash
-   git clone https://github.com/your-org/pr-review-extension.git
-   cd pr-review-extension
+   cd wifi-handshake-c
    npm install
    ```
 
-2. **Configure API keys.** Copy `.env.example` to `.env` and add your GitHub and
-   OpenAI credentials. Copy `extension/settings.example.json` to
-   `extension/settings.local.json` for non-secret settings. The extension reads
-   tokens from environment variables so they are never stored in source control.
-   When entered via the options page, credentials are saved only to Chrome's
-   local storage and will not sync across browsers.
-
-3. **Format and test.** Use Prettier to format your code and run the test
-   suite before committing:
+2. **Run the Metro bundler**
 
    ```bash
-   npm run format
-   npm test
+   npm start
    ```
 
-4. **Load the extension** in Chrome: navigate to `chrome://extensions`,
-   enable Developer Mode and load the `extension/` folder as an unpacked
-   extension.
+3. **Launch a native target**
 
-### Troubleshooting
+   - iOS (simulator): `npm run ios`
+   - Android (device/emulator): `npm run android`
 
-- Ensure you are using a recent LTS version of Node (18+).
-- If `npm install` fails, delete `node_modules` and try again.
-- When the extension cannot find API keys, verify that
-  `.env` contains valid credentials or re-enter them via the options page.
-- Tests failing due to missing modules can often be fixed by running
-  `npm install`.
+## Quality checks
 
-### Advanced Model Fine-tuning
+- Lint the codebase with `npm run lint`.
+- Execute the Jest test suite with `npm test`. The command is configured to succeed even when no test files are present so CI pipelines remain green until tests are added.
 
-The `training/peft_train.py` script demonstrates how to fine-tune an open-source model using LoRA and the curated feedback dataset.
+## Licensing
 
-**Prerequisites:**
-
-```bash
-pip install transformers datasets peft torch
-```
-
-**Data Format:**
-
-The dataset should be a JSON array of records with `prompt`, `completion`, and `adopted` fields. Example:
-
-```json
-[
-  {
-    "prompt": "Review this code: function add(a, b) { return a + b; }",
-    "completion": "This function looks good. Consider adding type annotations.",
-    "adopted": true
-  }
-]
-```
-
-**Usage:**
-
-```bash
-python training/peft_train.py data/feedback.json codellama/CodeLlama-7b-hf adapters/
-```
-
-## Phase 3: One-Click Code Suggestions
-
-1. **Mode Selector**  
-   Use the dropdown in the PR header to switch between Performance, Security, or Test modes.
-2. **Viewing Suggestions**  
-   After selecting a mode, suggestions auto-refresh. Each block shows an AST-aware diff.
-3. **Apply a Suggestion**  
-   Click “Apply” to patch your branch directly via GitHub API.
-4. **Metrics & Adoption**  
-   We record `suggestion_displayed`, `suggestion_clicked`, and `patch_applied` events.
-   Retrieve usage stats:
-   ```bash
-   curl http://localhost:3000/metrics/report
-   ```
+Refer to the project owner for licensing terms.

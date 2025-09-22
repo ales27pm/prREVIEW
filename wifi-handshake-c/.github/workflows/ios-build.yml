@@ -1,0 +1,90 @@
+name: Build iOS IPA
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: wifi-handshake-c
+
+jobs:
+  build:
+    runs-on: macos-13
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: wifi-handshake-c/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install CocoaPods
+        run: |
+          cd ios
+          pod install
+
+      - name: Configure signing
+        env:
+          P12_BASE64: ${{ secrets.P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          PROVISIONING_PROFILE: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          if [ -z "$P12_BASE64" ]; then
+            echo "Skipping signing configuration because secrets are not available."
+            exit 0
+          fi
+          security create-keychain -p "$P12_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$P12_PASSWORD" build.keychain
+          echo "$P12_BASE64" | base64 --decode > cert.p12
+          security import cert.p12 -k build.keychain -P "$P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$P12_PASSWORD" build.keychain
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$PROVISIONING_PROFILE" | base64 --decode > provisioning.mobileprovision
+          cp provisioning.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
+
+      - name: Build archive
+        env:
+          DEVELOPMENT_TEAM_ID: ${{ secrets.DEVELOPMENT_TEAM_ID }}
+        run: |
+          cd ios
+          xcodebuild \
+            -workspace WiFiHandshakeCapture.xcworkspace \
+            -scheme WiFiHandshakeCapture \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath build/WiFiHandshakeCapture.xcarchive \
+            DEVELOPMENT_TEAM=${DEVELOPMENT_TEAM_ID} \
+            archive
+
+      - name: Export IPA
+        run: |
+          cd ios
+          mkdir -p build/export
+          xcodebuild -exportArchive \
+            -archivePath build/WiFiHandshakeCapture.xcarchive \
+            -exportOptionsPlist exportOptions.json \
+            -exportPath build/export \
+            -allowProvisioningUpdates
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WiFiHandshakeCapture.ipa
+          path: wifi-handshake-c/ios/build/export/WiFiHandshakeCapture.ipa
+
+      - name: Cleanup keychain
+        if: always()
+        run: |
+          security delete-keychain build.keychain || true
