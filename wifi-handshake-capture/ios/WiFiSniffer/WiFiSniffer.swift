@@ -20,7 +20,13 @@ class WiFiSniffer: RCTEventEmitter, CLLocationManagerDelegate {
   }
 
   override func supportedEvents() -> [String]! {
-    ["networkStatus", "packetCaptured", "locationPermission"]
+    ["networkStatus", "packetCaptured", "locationPermission", "handshakeComplete"]
+  }
+
+  private func emitOnMain(_ name: String, body: Any?) {
+    DispatchQueue.main.async { [weak self] in
+      self?.sendEvent(withName: name, body: body)
+    }
   }
 
   private func currentAuthorizationStatus() -> CLAuthorizationStatus {
@@ -84,7 +90,7 @@ class WiFiSniffer: RCTEventEmitter, CLLocationManagerDelegate {
         "interfaceType": path.usesInterfaceType(.wifi) ? "WiFi" : "Other",
         "isExpensive": path.isExpensive,
       ]
-      self.sendEvent(withName: "networkStatus", body: info)
+      self.emitOnMain("networkStatus", body: info)
     }
     monitor.start(queue: captureQueue)
     pathMonitor = monitor
@@ -132,7 +138,7 @@ class WiFiSniffer: RCTEventEmitter, CLLocationManagerDelegate {
     for (index, packet) in packets.enumerated() {
       captureQueue.asyncAfter(deadline: .now() + .seconds(index)) { [weak self] in
         guard let self = self, self.isObserving else { return }
-        self.sendEvent(withName: "packetCaptured", body: packet)
+        self.emitOnMain("packetCaptured", body: packet)
       }
     }
   }
@@ -157,7 +163,9 @@ class WiFiSniffer: RCTEventEmitter, CLLocationManagerDelegate {
   ) {
     captureQueue.asyncAfter(deadline: .now() + 0.2) { [weak self] in
       guard let self = self, self.isObserving else {
-        resolve(false)
+        DispatchQueue.main.async {
+          resolve(false)
+        }
         return
       }
 
@@ -169,8 +177,10 @@ class WiFiSniffer: RCTEventEmitter, CLLocationManagerDelegate {
         "data": "deauth-base64-packet",
         "count": count.intValue,
       ]
-      self.sendEvent(withName: "packetCaptured", body: packet)
-      resolve(true)
+      self.emitOnMain("packetCaptured", body: packet)
+      DispatchQueue.main.async {
+        resolve(true)
+      }
     }
   }
 
@@ -182,19 +192,28 @@ class WiFiSniffer: RCTEventEmitter, CLLocationManagerDelegate {
     isObserving = false
   }
 
-  func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
-    guard isObserving else { return }
-
-    let statusString: String
+  private func permissionStatusString(_ status: CLAuthorizationStatus) -> String {
     switch status {
     case .authorizedAlways, .authorizedWhenInUse:
-      statusString = "granted"
+      return "granted"
     case .denied, .restricted:
-      statusString = "denied"
+      return "denied"
     default:
-      statusString = "unknown"
+      return "unknown"
     }
+  }
 
-    sendEvent(withName: "locationPermission", body: ["status": statusString])
+  func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
+    guard isObserving else { return }
+    emitOnMain("locationPermission", body: ["status": permissionStatusString(status)])
+  }
+
+  @available(iOS 14.0, *)
+  func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+    guard isObserving else { return }
+    emitOnMain(
+      "locationPermission",
+      body: ["status": permissionStatusString(manager.authorizationStatus)]
+    )
   }
 }

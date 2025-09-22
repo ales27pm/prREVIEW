@@ -19,4 +19,7 @@ RCT_EXTERN_METHOD(sendDeauth:(NSString *)bssid
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(addListener:(NSString *)eventName)
+RCT_EXTERN_METHOD(removeListeners:(nonnull NSNumber *)count)
+
 @end

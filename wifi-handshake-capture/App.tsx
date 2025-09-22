@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { SafeAreaView, StatusBar, StyleSheet, View } from 'react-native';
-import WiFiSnifferService from './src/services/WiFiSnifferService';
-import { NetworkScanner } from './src/components/NetworkScanner';
-import { HandshakeCapture } from './src/components/HandshakeCapture';
-import type { WiFiNetwork } from './src/types/WiFiSniffer';
+import WiFiSnifferService from '@/services/WiFiSnifferService';
+import { NetworkScanner } from '@/components/NetworkScanner';
+import { HandshakeCapture } from '@/components/HandshakeCapture';
+import type { WiFiNetwork } from '@/types/WiFiSniffer';
 
 const App: React.FC = () => {
   const [selectedNetwork, setSelectedNetwork] = useState<WiFiNetwork | null>(null);

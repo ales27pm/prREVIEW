@@ -1,12 +1,20 @@
-import { DeviceEventEmitter, NativeEventEmitter, Platform } from 'react-native';
+import { NativeEventEmitter, Platform } from 'react-native';
 import { PERMISSIONS, RESULTS, request } from 'react-native-permissions';
 import RNFS from 'react-native-fs';
 import WiFiSnifferModule, {
+  WiFiSnifferEvents,
+  isWiFiSnifferAvailable,
   type HandshakePacket,
   type WiFiNetwork,
-} from '../types/WiFiSniffer';
+} from '@/types/WiFiSniffer';
 
 type Subscription = { remove: () => void };
+
+export interface HandshakeCompletePayload {
+  bssid?: string;
+  clientMac?: string;
+  packets: HandshakePacket[];
+}
 
 export interface CaptureState {
   isCapturing: boolean;
@@ -22,14 +30,19 @@ class WiFiSnifferService {
     hasCompleteHandshake: false,
   };
 
-  private emitter = new NativeEventEmitter(WiFiSnifferModule as any);
+  private emitter: NativeEventEmitter | null = null;
   private eventSubscriptions: Subscription[] = [];
+  private handshakeListeners = new Set<(payload: HandshakeCompletePayload) => void>();
 
   async initialize(): Promise<void> {
     try {
       await this.requestPermissions();
     } catch (error) {
       console.error('Permission initialization failed:', error);
+    }
+
+    if (!isWiFiSnifferAvailable) {
+      console.warn('[WiFiSnifferService] Native module not available; running in fallback mode.');
     }
 
     this.setupEventListeners();
@@ -49,22 +62,11 @@ class WiFiSnifferService {
   private setupEventListeners(): void {
     this.cleanup();
 
+    this.emitter = WiFiSnifferEvents;
+
     this.eventSubscriptions.push(
       this.emitter.addListener('packetCaptured', (packetData: HandshakePacket) => {
         this.handlePacketCaptured(packetData);
-        DeviceEventEmitter.emit('packetCaptured', packetData);
-      })
-    );
-
-    this.eventSubscriptions.push(
-      this.emitter.addListener('networkStatus', (status) => {
-        DeviceEventEmitter.emit('networkStatus', status);
-      })
-    );
-
-    this.eventSubscriptions.push(
-      this.emitter.addListener('locationPermission', (status) => {
-        DeviceEventEmitter.emit('locationPermission', status);
       })
     );
   }
@@ -99,11 +101,14 @@ class WiFiSnifferService {
 
   private notifyCompleteHandshake(): void {
     const [firstPacket] = this.captureState.capturedPackets;
-    DeviceEventEmitter.emit('handshakeComplete', {
+    const payload: HandshakeCompletePayload = {
       bssid: firstPacket?.bssid,
       clientMac: firstPacket?.clientMac,
       packets: this.captureState.capturedPackets,
-    });
+    };
+
+    this.handshakeListeners.forEach((listener) => listener(payload));
+    this.emitter?.emit('handshakeComplete', payload);
   }
 
   async scanNetworks(): Promise<WiFiNetwork[]> {
@@ -189,9 +194,17 @@ class WiFiSnifferService {
   cleanup(): void {
     this.eventSubscriptions.forEach((subscription) => subscription.remove());
     this.eventSubscriptions = [];
+    this.emitter = null;
+  }
+
+  onHandshakeComplete(listener: (payload: HandshakeCompletePayload) => void): () => void {
+    this.handshakeListeners.add(listener);
+    return () => {
+      this.handshakeListeners.delete(listener);
+    };
   }
 }
 
-export type { WiFiNetwork, HandshakePacket } from '../types/WiFiSniffer';
+export type { WiFiNetwork, HandshakePacket } from '@/types/WiFiSniffer';
 
 export default new WiFiSnifferService();

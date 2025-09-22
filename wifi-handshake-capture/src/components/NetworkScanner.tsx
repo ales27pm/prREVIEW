@@ -7,8 +7,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import WiFiSnifferService from '../services/WiFiSnifferService';
-import type { WiFiNetwork } from '../types/WiFiSniffer';
+import WiFiSnifferService from '@/services/WiFiSnifferService';
+import type { WiFiNetwork } from '@/types/WiFiSniffer';
 
 interface NetworkScannerProps {
   onNetworkSelect: (network: WiFiNetwork) => void;

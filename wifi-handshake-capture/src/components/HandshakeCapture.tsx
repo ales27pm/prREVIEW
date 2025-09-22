@@ -1,10 +1,10 @@
 import React from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useHandshakeCapture } from '../hooks/useHandshakeCapture';
-import type { WiFiNetwork } from '../types/WiFiSniffer';
-import { CaptureControls } from './CaptureControls';
-import { CaptureStats } from './CaptureStats';
-import { PacketItem } from './PacketItem';
+import { useHandshakeCapture } from '@/hooks/useHandshakeCapture';
+import type { WiFiNetwork } from '@/types/WiFiSniffer';
+import { CaptureControls } from '@/components/CaptureControls';
+import { CaptureStats } from '@/components/CaptureStats';
+import { PacketItem } from '@/components/PacketItem';
 
 interface HandshakeCaptureProps {
   selectedNetwork: WiFiNetwork | null;

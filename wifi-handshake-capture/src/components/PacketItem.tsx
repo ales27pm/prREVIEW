@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import type { HandshakePacket } from '../services/WiFiSnifferService';
+import type { HandshakePacket } from '@/services/WiFiSnifferService';
 
 interface PacketItemProps {
   packet: HandshakePacket;

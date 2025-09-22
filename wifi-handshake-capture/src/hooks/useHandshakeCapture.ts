@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, DeviceEventEmitter } from 'react-native';
-import WiFiSnifferService, {
-  type CaptureState,
-} from '../services/WiFiSnifferService';
-import type { WiFiNetwork } from '../types/WiFiSniffer';
+import { Alert } from 'react-native';
+import WiFiSnifferService, { type CaptureState } from '@/services/WiFiSnifferService';
+import { WiFiSnifferEvents } from '@/types/WiFiSniffer';
+import type { WiFiNetwork } from '@/types/WiFiSniffer';
 
 export function useHandshakeCapture(selectedNetwork: WiFiNetwork | null) {
   const [captureState, setCaptureState] = useState<CaptureState>(
@@ -16,16 +15,20 @@ export function useHandshakeCapture(selectedNetwork: WiFiNetwork | null) {
   }, []);
 
   useEffect(() => {
-    const subscriptions = [
-      DeviceEventEmitter.addListener('packetCaptured', refreshCaptureState),
-      DeviceEventEmitter.addListener('handshakeComplete', () => {
-        Alert.alert('Success!', 'Complete 4-way handshake captured!');
-        refreshCaptureState();
-      }),
-    ];
+    const subscriptions: Array<{ remove: () => void }> = [];
+
+    subscriptions.push(
+      WiFiSnifferEvents.addListener('packetCaptured', refreshCaptureState)
+    );
+
+    const unsubscribeHandshake = WiFiSnifferService.onHandshakeComplete(() => {
+      Alert.alert('Success!', 'Complete 4-way handshake captured!');
+      refreshCaptureState();
+    });
 
     return () => {
       subscriptions.forEach((subscription) => subscription.remove());
+      unsubscribeHandshake();
     };
   }, [refreshCaptureState]);
 
