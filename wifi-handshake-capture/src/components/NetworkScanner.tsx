@@ -66,7 +66,7 @@ export const NetworkScanner: React.FC<NetworkScannerProps> = ({ onNetworkSelect 
 
       <FlatList
         data={networks}
-        keyExtractor={(item) => item.bssid}
+        keyExtractor={(item) => `${item.bssid}_${item.ssid}`}
         renderItem={renderNetwork}
         style={styles.list}
         contentContainerStyle={networks.length === 0 ? styles.emptyContainer : undefined}

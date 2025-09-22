@@ -72,7 +72,11 @@ class WiFiSnifferService {
   private handlePacketCaptured(packetData: HandshakePacket): void {
     this.captureState.capturedPackets.push(packetData);
 
-    if (packetData.type === 'EAPOL' && this.isCompleteHandshake(packetData)) {
+    if (
+      packetData.type === 'EAPOL' &&
+      this.isCompleteHandshake(packetData) &&
+      !this.captureState.hasCompleteHandshake
+    ) {
       this.captureState.hasCompleteHandshake = true;
       this.notifyCompleteHandshake();
     }
@@ -111,17 +115,21 @@ class WiFiSnifferService {
     }
   }
 
-  async startCapture(interfaceName: string): Promise<void> {
+  async startCapture(interfaceName: string, network?: WiFiNetwork): Promise<void> {
     if (this.captureState.isCapturing) {
       throw new Error('Capture already in progress');
     }
 
+    this.captureState.isCapturing = true;
+    this.captureState.currentNetwork = network;
+
     try {
       await WiFiSnifferModule.startCapture(interfaceName);
-      this.captureState.isCapturing = true;
       this.captureState.capturedPackets = [];
       this.captureState.hasCompleteHandshake = false;
     } catch (error) {
+      this.captureState.isCapturing = false;
+      this.captureState.currentNetwork = undefined;
       console.error('Failed to start capture:', error);
       throw error;
     }
@@ -135,6 +143,7 @@ class WiFiSnifferService {
     try {
       await WiFiSnifferModule.stopCapture();
       this.captureState.isCapturing = false;
+      this.captureState.currentNetwork = undefined;
     } catch (error) {
       console.error('Failed to stop capture:', error);
       throw error;

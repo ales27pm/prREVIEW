@@ -1,18 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  DeviceEventEmitter,
-} from 'react-native';
-import WiFiSnifferService, {
-  type CaptureState,
-  type HandshakePacket,
-} from '../services/WiFiSnifferService';
+import React from 'react';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useHandshakeCapture } from '../hooks/useHandshakeCapture';
 import type { WiFiNetwork } from '../types/WiFiSniffer';
+import { CaptureControls } from './CaptureControls';
+import { CaptureStats } from './CaptureStats';
+import { PacketItem } from './PacketItem';
 
 interface HandshakeCaptureProps {
   selectedNetwork: WiFiNetwork | null;
@@ -23,63 +15,14 @@ export const HandshakeCapture: React.FC<HandshakeCaptureProps> = ({
   selectedNetwork,
   onBack,
 }) => {
-  const [captureState, setCaptureState] = useState<CaptureState>(
-    WiFiSnifferService.getCaptureState()
-  );
-  const [isBusy, setIsBusy] = useState(false);
-
-  useEffect(() => {
-    const subs = [
-      DeviceEventEmitter.addListener('packetCaptured', () => {
-        setCaptureState(WiFiSnifferService.getCaptureState());
-      }),
-      DeviceEventEmitter.addListener('handshakeComplete', () => {
-        Alert.alert('Success!', 'Complete 4-way handshake captured!');
-        setCaptureState(WiFiSnifferService.getCaptureState());
-      }),
-    ];
-
-    return () => {
-      subs.forEach((sub) => sub.remove());
-    };
-  }, []);
+  const { captureState, isBusy, startCapture, stopCapture, sendDeauth, exportHandshake } =
+    useHandshakeCapture(selectedNetwork);
 
   const packetCount = captureState.capturedPackets.length;
+  const hasSelectedNetwork = Boolean(selectedNetwork);
+  const canExport = captureState.hasCompleteHandshake && packetCount > 0;
 
-  const disabled = useMemo(() => !selectedNetwork || isBusy, [selectedNetwork, isBusy]);
-
-  const startCapture = async () => {
-    if (!selectedNetwork) {
-      Alert.alert('Error', 'Please select a network first.');
-      return;
-    }
-
-    setIsBusy(true);
-    try {
-      await WiFiSnifferService.startCapture('en0');
-      setCaptureState(WiFiSnifferService.getCaptureState());
-    } catch (error) {
-      console.error(error);
-      Alert.alert('Capture Failed', 'Unable to start packet capture.');
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const stopCapture = async () => {
-    setIsBusy(true);
-    try {
-      await WiFiSnifferService.stopCapture();
-      setCaptureState(WiFiSnifferService.getCaptureState());
-    } catch (error) {
-      console.error(error);
-      Alert.alert('Error', 'Failed to stop capture');
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const sendDeauth = async () => {
+  const handleSendDeauth = () => {
     if (!selectedNetwork) {
       return;
     }
@@ -93,21 +36,9 @@ export const HandshakeCapture: React.FC<HandshakeCaptureProps> = ({
           text: 'Send',
           style: 'destructive',
           onPress: async () => {
-            setIsBusy(true);
-            try {
-              const success = await WiFiSnifferService.sendDeauth(
-                selectedNetwork.bssid,
-                'FF:FF:FF:FF:FF:FF',
-                5
-              );
-              if (success) {
-                Alert.alert('Deauth Sent', 'Deauthentication frames sent.');
-              }
-            } catch (error) {
-              console.error(error);
-              Alert.alert('Error', 'Failed to send deauth frames');
-            } finally {
-              setIsBusy(false);
+            const success = await sendDeauth();
+            if (success) {
+              Alert.alert('Deauth Sent', 'Deauthentication frames sent.');
             }
           },
         },
@@ -115,34 +46,12 @@ export const HandshakeCapture: React.FC<HandshakeCaptureProps> = ({
     );
   };
 
-  const exportHandshake = async () => {
-    setIsBusy(true);
-    try {
-      const path = await WiFiSnifferService.exportHandshake();
-      if (path) {
-        Alert.alert('Exported', `Handshake saved to: ${path}`);
-      } else {
-        Alert.alert('Error', 'No complete handshake to export');
-      }
-    } catch (error) {
-      console.error(error);
-      Alert.alert('Export Failed', 'Could not save handshake data');
-    } finally {
-      setIsBusy(false);
+  const handleExportHandshake = async () => {
+    const path = await exportHandshake();
+    if (path) {
+      Alert.alert('Exported', `Handshake saved to: ${path}`);
     }
   };
-
-  const renderPacket = (packet: HandshakePacket, index: number) => (
-    <View style={styles.packetItem} key={`${packet.timestamp}-${index}`}>
-      <Text style={styles.packetHeader}>
-        {packet.type} {packet.message ? `Msg ${packet.message}` : ''}
-      </Text>
-      <Text style={styles.packetMeta}>
-        {new Date(packet.timestamp * 1000).toLocaleTimeString()}
-      </Text>
-      <Text style={styles.packetData}>{packet.data.substring(0, 64)}…</Text>
-    </View>
-  );
 
   return (
     <View style={styles.container}>
@@ -161,56 +70,30 @@ export const HandshakeCapture: React.FC<HandshakeCaptureProps> = ({
         )}
       </View>
 
-      <View style={styles.controls}>
-        <TouchableOpacity
-          style={[styles.controlButton, isBusy && styles.disabledButton]}
-          onPress={captureState.isCapturing ? stopCapture : startCapture}
-          disabled={disabled}
-        >
-          <Text style={styles.controlButtonText}>
-            {captureState.isCapturing ? 'Stop Capture' : 'Start Capture'}
-          </Text>
-        </TouchableOpacity>
+      <CaptureControls
+        isCapturing={captureState.isCapturing}
+        isBusy={isBusy}
+        hasSelectedNetwork={hasSelectedNetwork}
+        canExport={canExport}
+        onStartCapture={startCapture}
+        onStopCapture={stopCapture}
+        onSendDeauth={handleSendDeauth}
+        onExportHandshake={handleExportHandshake}
+      />
 
-        <TouchableOpacity
-          style={[styles.controlButton, styles.secondaryButton, disabled && styles.disabledButton]}
-          onPress={sendDeauth}
-          disabled={disabled}
-        >
-          <Text style={styles.controlButtonText}>Send Deauth</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.controlButton, styles.exportButton, isBusy && styles.disabledButton]}
-          onPress={exportHandshake}
-          disabled={isBusy}
-        >
-          <Text style={styles.controlButtonText}>Export Handshake</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.stats}>
-        <View style={styles.statItem}>
-          <Text style={styles.statLabel}>Status</Text>
-          <Text style={styles.statValue}>
-            {captureState.isCapturing ? 'Capturing' : 'Idle'}
-          </Text>
-        </View>
-        <View style={styles.statItem}>
-          <Text style={styles.statLabel}>Packets</Text>
-          <Text style={styles.statValue}>{packetCount}</Text>
-        </View>
-        <View style={styles.statItem}>
-          <Text style={styles.statLabel}>Complete?</Text>
-          <Text style={styles.statValue}>{captureState.hasCompleteHandshake ? 'Yes' : 'No'}</Text>
-        </View>
-      </View>
+      <CaptureStats
+        isCapturing={captureState.isCapturing}
+        packetCount={packetCount}
+        hasCompleteHandshake={captureState.hasCompleteHandshake}
+      />
 
       {packetCount > 0 && (
         <View style={styles.packetsSection}>
           <Text style={styles.sectionTitle}>Captured Packets</Text>
           <ScrollView style={styles.packetsList}>
-            {captureState.capturedPackets.map(renderPacket)}
+            {captureState.capturedPackets.map((packet, index) => (
+              <PacketItem key={`${packet.timestamp}-${index}`} packet={packet} />
+            ))}
           </ScrollView>
         </View>
       )}
@@ -261,54 +144,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  controls: {
-    padding: 16,
-    gap: 12,
-  },
-  controlButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: '#007AFF',
-    marginBottom: 12,
-  },
-  secondaryButton: {
-    backgroundColor: '#FF3B30',
-  },
-  exportButton: {
-    backgroundColor: '#34C759',
-  },
-  disabledButton: {
-    opacity: 0.6,
-  },
-  controlButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  stats: {
-    flexDirection: 'row',
-    backgroundColor: 'white',
-    padding: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E5E5E7',
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#8E8E93',
-    marginBottom: 4,
-  },
-  statValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1C1C1E',
-  },
   packetsSection: {
     flex: 1,
     padding: 16,
@@ -321,30 +156,6 @@ const styles = StyleSheet.create({
   },
   packetsList: {
     maxHeight: 320,
-  },
-  packetItem: {
-    backgroundColor: 'white',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: '#007AFF',
-  },
-  packetHeader: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1C1C1E',
-    marginBottom: 4,
-  },
-  packetMeta: {
-    fontSize: 12,
-    color: '#8E8E93',
-    marginBottom: 4,
-  },
-  packetData: {
-    fontSize: 11,
-    color: '#48484A',
-    fontFamily: 'Courier',
   },
 });
 
