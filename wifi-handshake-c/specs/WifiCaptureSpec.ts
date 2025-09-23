@@ -5,46 +5,15 @@ import {
   Platform,
   TurboModuleRegistry,
 } from 'react-native';
+import type {
+  DeepCaptureOptions,
+  PacketData,
+  WiFiCaptureNativeModule,
+} from '@/types/WiFiSniffer';
 
-export interface DeepCaptureOptions {
-  udpPort: number;
-  filter?: string;
-}
+export type DeepPacketEvent = PacketData;
 
-export interface CaptureStatistics {
-  bytesCaptured: number;
-  packetsProcessed: number;
-  dropped: number;
-}
-
-export interface StartDeepCaptureResult {
-  sessionId: string;
-}
-
-export type DeepPacketEvent = {
-  id: string;
-  timestamp: number;
-  payload: string;
-  headers: Record<string, unknown>;
-  preview?: string;
-};
-
-export interface Spec extends TurboModule {
-  // Legacy surface
-  scan: () => Promise<Array<Record<string, unknown>>>;
-  start: (interfaceName: string) => Promise<boolean>;
-  stop: () => Promise<boolean>;
-  deauth: (bssid: string, channel: number) => Promise<boolean>;
-
-  // Deep mode APIs
-  startDeepCapture: (
-    options: DeepCaptureOptions
-  ) => Promise<StartDeepCaptureResult>;
-  stopDeepCapture: (sessionId: string) => Promise<void>;
-  getCaptureStats: (sessionId: string) => Promise<CaptureStatistics>;
-  addListener: (eventName: string) => void;
-  removeListeners: (count: number) => void;
-}
+export type Spec = TurboModule & WiFiCaptureNativeModule;
 
 const LINKING_ERROR =
   "The native module 'WifiCapture' is not linked. Ensure pods are installed and that the app was rebuilt.";
@@ -78,18 +47,18 @@ const createFallbackModule = (): Spec => ({
     }
     return false;
   },
-  async startDeepCapture() {
+  async startDeepCapture(_options: DeepCaptureOptions) {
     if (Platform.OS === 'ios') {
       console.warn(`[WifiCapture] ${LINKING_ERROR}`);
     }
     return { sessionId: 'fallback' };
   },
-  async stopDeepCapture() {
+  async stopDeepCapture(_sessionId: string) {
     if (Platform.OS === 'ios') {
       console.warn(`[WifiCapture] ${LINKING_ERROR}`);
     }
   },
-  async getCaptureStats() {
+  async getCaptureStats(_sessionId: string) {
     if (Platform.OS === 'ios') {
       console.warn(`[WifiCapture] ${LINKING_ERROR}`);
     }
@@ -113,5 +82,11 @@ export const WifiCaptureEvents = nativeModule
         (nativeModule as unknown as object)
     )
   : fallbackEmitter;
+
+export type {
+  CaptureStatistics,
+  DeepCaptureOptions,
+  StartDeepCaptureResult,
+} from '@/types/WiFiSniffer';
 
 export default WifiCapture;

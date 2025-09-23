@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { NativeEventEmitter, NativeModules } from 'react-native';
 import { decode } from 'base64-arraybuffer';
 import WifiCapture, {
   WifiCaptureEvents,
   type DeepPacketEvent,
 } from 'specs/WifiCaptureSpec';
+import { parsePacket as parseDeepPacket } from '@/services/PacketParserService';
 
 export interface PacketPreview {
   id: string;
@@ -11,6 +13,7 @@ export interface PacketPreview {
   binary: Uint8Array;
   preview: string;
   headers: Record<string, unknown>;
+  isHandshake?: boolean;
 }
 
 const HEX_PREVIEW_BYTES = 32;
@@ -58,12 +61,21 @@ export const usePackets = (sessionId: string | null): UsePacketsResult => {
           ? `${raw.preview} (${binary.length} bytes)`
           : createPreview(binary);
 
+      const enriched = parseDeepPacket({
+        id: raw.id,
+        timestamp: raw.timestamp,
+        payload: raw.payload,
+        headers: raw.headers ?? {},
+        preview: raw.preview ?? '',
+      });
+
       const packet: PacketPreview = {
         id: raw.id,
         timestamp: raw.timestamp,
         binary,
         preview,
         headers: raw.headers ?? {},
+        isHandshake: enriched.isHandshake,
       };
 
       return packet;
@@ -101,16 +113,27 @@ export const usePackets = (sessionId: string | null): UsePacketsResult => {
       return undefined;
     }
 
+    const nativeModule = NativeModules.WifiCapture as
+      | Record<string, unknown>
+      | undefined;
+    const hasNativeModule = Boolean(nativeModule);
+    const emitter = hasNativeModule
+      ? new NativeEventEmitter(nativeModule)
+      : WifiCaptureEvents;
+
     if (typeof WifiCapture.addListener === 'function') {
       WifiCapture.addListener('onDeepPacket');
     }
 
-    const subscription = WifiCaptureEvents.addListener('onDeepPacket', ingest);
+    const subscription = emitter.addListener('onDeepPacket', ingest);
 
     return () => {
       subscription.remove();
       if (typeof WifiCapture.removeListeners === 'function') {
         WifiCapture.removeListeners(1);
+      }
+      if (hasNativeModule) {
+        (emitter as NativeEventEmitter).removeAllListeners('onDeepPacket');
       }
     };
   }, [ingest, sessionId]);

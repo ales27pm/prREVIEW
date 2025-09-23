@@ -1,5 +1,10 @@
+import { decode } from 'base64-arraybuffer';
 import { Buffer } from 'buffer';
-import type { HandshakePacket, ParsedHandshake } from '@/types/WiFiSniffer';
+import type {
+  HandshakePacket,
+  PacketData,
+  ParsedHandshake,
+} from '@/types/WiFiSniffer';
 
 const MIN_EAPOL_FRAME_LENGTH = 99;
 const REQUIRED_HANDSHAKE_MESSAGES: ReadonlyArray<1 | 2 | 3 | 4> = [1, 2, 3, 4];
@@ -327,3 +332,25 @@ export class PacketParserService {
 }
 
 export default PacketParserService;
+
+export const parsePacket = (
+  packet: PacketData
+): PacketData & { isHandshake?: boolean } => {
+  try {
+    const payload = new Uint8Array(decode(packet.payload));
+    const type = String(packet.headers?.type ?? '');
+    const isHandshake =
+      type.includes('Data') &&
+      payload.length > 2 &&
+      payload[0] === 0x88 &&
+      payload[1] === 0x8e;
+
+    return isHandshake ? { ...packet, isHandshake } : packet;
+  } catch (error) {
+    console.warn(
+      '[PacketParserService] Failed to decode packet payload:',
+      error
+    );
+    return packet;
+  }
+};

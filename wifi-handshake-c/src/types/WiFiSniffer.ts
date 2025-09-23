@@ -154,6 +154,43 @@ export const WiFiSnifferEvents = new NativeEventEmitter(
 
 export const isWiFiSnifferAvailable = Boolean(nativeModule);
 
+export interface PacketData {
+  id: string;
+  timestamp: number;
+  payload: string;
+  headers: Record<string, unknown>;
+  preview: string;
+}
+
+export interface DeepCaptureOptions {
+  udpPort?: number;
+  filter?: string;
+}
+
+export interface StartDeepCaptureResult {
+  sessionId: string;
+}
+
+export interface CaptureStatistics {
+  bytesCaptured: number;
+  packetsProcessed: number;
+  dropped: number;
+}
+
+export interface WiFiCaptureNativeModule {
+  scan(): Promise<Array<Record<string, unknown>>>;
+  start(interfaceName: string): Promise<boolean>;
+  stop(): Promise<boolean>;
+  deauth(bssid: string, channel: number): Promise<boolean>;
+  startDeepCapture(
+    options: DeepCaptureOptions
+  ): Promise<StartDeepCaptureResult>;
+  stopDeepCapture(sessionId: string): Promise<void>;
+  getCaptureStats(sessionId: string): Promise<CaptureStatistics>;
+  addListener(eventName: 'onDeepPacket'): void;
+  removeListeners(count: number): void;
+}
+
 export default WiFiSniffer;
 
 export type { HandshakePacket as WiFiHandshakePacket };
