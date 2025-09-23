@@ -193,63 +193,87 @@ final class WifiCaptureImpl: NSObject {
         return
       }
 
-      let group = DispatchGroup()
-      group.enter()
-
-      var tunnelError: Error?
-      var didComplete = false
-      let timeout = DispatchTime.now() + .milliseconds(Int(self.tunnelTimeout * 1000))
-
       let connection = manager.connection
-      let observer = CFRunLoopObserverCreateWithHandler(
-        kCFAllocatorDefault,
-        CFRunLoopActivity.allActivities.rawValue,
-        true,
-        0
-      ) { _, _ in
-        if didComplete {
+      var finished = false
+      var token: NSObjectProtocol?
+
+      func clearObserver() {
+        if let tokenValue = token {
+          NotificationCenter.default.removeObserver(tokenValue)
+          token = nil
+        }
+      }
+
+      func succeed() {
+        guard !finished else { return }
+        finished = true
+        clearObserver()
+
+        let sessionId = UUID().uuidString
+        self.performOnQueue(wait: true) {
+          self.tunnelManager = manager
+          self.currentPort = port
+          self.currentSessionId = sessionId
+          self.stats = CaptureStats()
+          self.filterString = filter
+          self.filterData = filter?.data(using: .utf8)
+        }
+
+        do {
+          try self.startUdpListener(port: port)
+          DispatchQueue.main.async {
+            resolve(["sessionId": sessionId])
+          }
+        } catch {
+          self.logger.error("UDP listener failed: \(error.localizedDescription, privacy: .public)")
+          if let nwError = error as? NWError, case .posix(let posixError) = nwError, posixError == .EADDRINUSE {
+            self.handleStartFailure(
+              code: "PORT_BOUND",
+              message: "UDP port \(port) is already in use",
+              error: error,
+              manager: manager,
+              reject: reject
+            )
+          } else {
+            self.handleStartFailure(
+              code: "UDP_LISTENER",
+              message: error.localizedDescription,
+              error: error,
+              manager: manager,
+              reject: reject
+            )
+          }
+        }
+      }
+
+      func failAndRetry(_ reason: String) {
+        guard !finished else { return }
+        finished = true
+        clearObserver()
+        self.cleanupTunnel(manager: manager)
+        self.resetState()
+
+        if attempt >= self.maxRetries {
+          let error = NSError(
+            domain: "WifiCapture",
+            code: -3,
+            userInfo: [
+              NSLocalizedDescriptionKey: "Failed to start tunnel after \(self.maxRetries) attempts (\(reason))",
+            ]
+          )
+          self.logger.error("Tunnel start failed: \(reason, privacy: .public)")
+          DispatchQueue.main.async {
+            reject("TUNNEL_MAX_RETRIES", error.localizedDescription, error)
+          }
           return
         }
 
-        switch connection.status {
-        case .connected:
-          didComplete = true
-          group.leave()
-        case .invalid, .disconnected:
-          didComplete = true
-          tunnelError = NSError(
-            domain: "WifiCapture",
-            code: -2,
-            userInfo: [NSLocalizedDescriptionKey: "Tunnel failed to connect"]
-          )
-          group.leave()
-        default:
-          break
-        }
-      }
-
-      if let observer {
-        CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes)
-      }
-
-      let result = group.wait(timeout: timeout)
-
-      if let observer {
-        CFRunLoopRemoveObserver(CFRunLoopGetMain(), observer, .commonModes)
-      }
-
-      if result == .timedOut || tunnelError != nil {
-        if !didComplete {
-          didComplete = true
-          group.leave()
-        }
-        self.cleanupTunnel(manager: manager)
-        self.resetState()
-        let delay = self.baseRetryDelay * pow(2.0, Double(attempt - 1))
+        let retryDelay = self.baseRetryDelay * pow(2.0, Double(attempt - 1))
         self.logger.warning(
-          "Tunnel start failed, retrying (\(attempt)/\(self.maxRetries)) after \(delay, privacy: .public)s"
+          "Tunnel start failed (\(reason, privacy: .public)), retrying (\(attempt, privacy: .public)/\(self.maxRetries, privacy: .public)) after \(retryDelay, privacy: .public)s"
         )
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+        let deadline = DispatchTime.now() + .milliseconds(Int(retryDelay * 1000))
+        DispatchQueue.main.asyncAfter(deadline: deadline) {
           self.startTunnelWithRetry(
             manager: manager,
             port: port,
@@ -259,45 +283,37 @@ final class WifiCaptureImpl: NSObject {
             reject: reject
           )
         }
-        return
       }
 
-      let sessionId = UUID().uuidString
-      self.performOnQueue(wait: true) {
-        self.tunnelManager = manager
-        self.currentPort = port
-        self.currentSessionId = sessionId
-        self.stats = CaptureStats()
-        self.filterString = filter
-        self.filterData = filter?.data(using: .utf8)
+      token = NotificationCenter.default.addObserver(
+        forName: .NEVPNStatusDidChange,
+        object: connection,
+        queue: .main
+      ) { _ in
+        switch connection.status {
+        case .connected:
+          succeed()
+        case .invalid, .disconnected:
+          failAndRetry("status=\(String(describing: connection.status))")
+        default:
+          break
+        }
       }
 
-      do {
-        try self.startUdpListener(port: port)
-        DispatchQueue.main.async {
-          resolve(["sessionId": sessionId])
+      switch connection.status {
+      case .connected:
+        succeed()
+      case .invalid, .disconnected:
+        failAndRetry("status=\(String(describing: connection.status))")
+      default:
+        break
+      }
+
+      let timeoutDeadline = DispatchTime.now() + .milliseconds(Int(self.tunnelTimeout * 1000))
+      DispatchQueue.main.asyncAfter(deadline: timeoutDeadline) {
+        if !finished {
+          failAndRetry("timeout \(self.tunnelTimeout)s")
         }
-        return
-      } catch {
-        self.logger.error("UDP listener failed: \(error.localizedDescription, privacy: .public)")
-        if let nwError = error as? NWError, case .posix(let posixError) = nwError, posixError == .EADDRINUSE {
-          self.handleStartFailure(
-            code: "PORT_BOUND",
-            message: "UDP port \(port) is already in use",
-            error: error,
-            manager: manager,
-            reject: reject
-          )
-        } else {
-          self.handleStartFailure(
-            code: "UDP_LISTENER",
-            message: error.localizedDescription,
-            error: error,
-            manager: manager,
-            reject: reject
-          )
-        }
-        return
       }
     }
   }
@@ -424,10 +440,16 @@ final class WifiCaptureImpl: NSObject {
       connection.stateUpdateHandler = { [weak self, weak connection] state in
         guard let self, let connection else { return }
         let identifier = ObjectIdentifier(connection)
-        if case .ready = state {
+        switch state {
+        case .ready:
           self.receive(on: connection)
-        } else if case .failed = state || state == .cancelled {
+        case .failed(let error):
+          self.logger.error("UDP connection failed: \(error.localizedDescription, privacy: .public)")
           self.connections.removeValue(forKey: identifier)
+        case .cancelled:
+          self.connections.removeValue(forKey: identifier)
+        default:
+          break
         }
       }
       connection.start(queue: self.queue)

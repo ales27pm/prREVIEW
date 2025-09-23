@@ -338,12 +338,37 @@ export const parsePacket = (
 ): PacketData & { isHandshake?: boolean } => {
   try {
     const payload = new Uint8Array(decode(packet.payload));
-    const type = String(packet.headers?.type ?? '');
-    const isHandshake =
-      type.includes('Data') &&
-      payload.length > 2 &&
-      payload[0] === 0x88 &&
-      payload[1] === 0x8e;
+    const headerType = String(packet.headers?.type ?? '').toUpperCase();
+
+    let isHandshake = headerType.includes('EAPOL');
+
+    if (!isHandshake && payload.length >= 14) {
+      isHandshake = payload[12] === 0x88 && payload[13] === 0x8e;
+    }
+
+    if (!isHandshake && payload.length >= 32) {
+      const hasSnapHeader =
+        payload[24] === 0xaa &&
+        payload[25] === 0xaa &&
+        payload[26] === 0x03 &&
+        payload[27] === 0x00 &&
+        payload[28] === 0x00 &&
+        payload[29] === 0x00;
+
+      if (hasSnapHeader) {
+        isHandshake = payload[30] === 0x88 && payload[31] === 0x8e;
+      }
+    }
+
+    if (!isHandshake && payload.length >= 2) {
+      const maxIndex = Math.min(payload.length - 2, 62);
+      for (let index = 0; index <= maxIndex; index += 1) {
+        if (payload[index] === 0x88 && payload[index + 1] === 0x8e) {
+          isHandshake = true;
+          break;
+        }
+      }
+    }
 
     return isHandshake ? { ...packet, isHandshake } : packet;
   } catch (error) {

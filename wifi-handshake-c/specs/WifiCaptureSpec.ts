@@ -9,7 +9,7 @@ import type {
   DeepCaptureOptions,
   PacketData,
   WiFiCaptureNativeModule,
-} from '@/types/WiFiSniffer';
+} from '../src/types/WiFiSniffer';
 
 export type DeepPacketEvent = PacketData;
 
@@ -67,10 +67,8 @@ const createFallbackModule = (): Spec => ({
   addListener(eventName: string) {
     fallbackEmitter.addListener(eventName, () => undefined);
   },
-  removeListeners(count: number) {
-    for (let index = 0; index < count; index += 1) {
-      fallbackEmitter.removeAllListeners('onDeepPacket');
-    }
+  removeListeners(_count: number) {
+    fallbackEmitter.removeAllListeners('onDeepPacket');
   },
 });
 
@@ -87,6 +85,6 @@ export type {
   CaptureStatistics,
   DeepCaptureOptions,
   StartDeepCaptureResult,
-} from '@/types/WiFiSniffer';
+} from '../src/types/WiFiSniffer';
 
 export default WifiCapture;

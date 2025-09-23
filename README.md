@@ -35,7 +35,10 @@ wifi-handshake-c/
 
 4. **Run a local iOS build without signing**
 
+   Prerequisites: Install the Xcode command-line tools and CocoaPods. If Pods have not been installed yet for the iOS workspace, run `npx pod-install` first to avoid build failures.
+
    ```bash
+   npx pod-install
    npm run ios:build
    ```
 

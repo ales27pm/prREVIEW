@@ -113,9 +113,12 @@ export const usePackets = (sessionId: string | null): UsePacketsResult => {
       return undefined;
     }
 
-    const nativeModule = NativeModules.WifiCapture as
-      | Record<string, unknown>
-      | undefined;
+    const nativeModule =
+      typeof NativeModules !== 'undefined' && NativeModules != null
+        ? ((NativeModules as Record<string, unknown>).WifiCapture as
+            | Record<string, unknown>
+            | undefined)
+        : undefined;
     const hasNativeModule = Boolean(nativeModule);
     const emitter = hasNativeModule
       ? new NativeEventEmitter(nativeModule)
@@ -131,9 +134,6 @@ export const usePackets = (sessionId: string | null): UsePacketsResult => {
       subscription.remove();
       if (typeof WifiCapture.removeListeners === 'function') {
         WifiCapture.removeListeners(1);
-      }
-      if (hasNativeModule) {
-        (emitter as NativeEventEmitter).removeAllListeners('onDeepPacket');
       }
     };
   }, [ingest, sessionId]);

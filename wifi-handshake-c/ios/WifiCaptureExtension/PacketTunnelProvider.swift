@@ -82,13 +82,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
   }
 
   private func readPackets() {
-    packetFlow.readPackets { [weak self] packets, _, error in
+    packetFlow.readPackets { [weak self] packets, _ in
       guard let self else { return }
-
-      if let error {
-        self.logger.error("Failed to read packets: \(error.localizedDescription, privacy: .public)")
-        return
-      }
 
       guard !packets.isEmpty else {
         self.readPackets()
