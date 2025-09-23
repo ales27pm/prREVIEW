@@ -1,7 +1,9 @@
 import CoreLocation
 import Foundation
 import Network
+import NetworkExtension
 import React
+import SystemConfiguration.CaptiveNetwork
 
 @objc(WiFiSniffer)
 class WiFiSniffer: RCTEventEmitter, CLLocationManagerDelegate {
@@ -55,24 +57,13 @@ class WiFiSniffer: RCTEventEmitter, CLLocationManagerDelegate {
       return
     }
 
-    let simulatedNetworks: [[String: Any]] = [
-      [
-        "bssid": "AA:BB:CC:DD:EE:FF",
-        "ssid": "Office WiFi",
-        "signal": -55,
-        "channel": 1,
-        "security": "WPA2",
-      ],
-      [
-        "bssid": "11:22:33:44:55:66",
-        "ssid": "Lab",
-        "signal": -68,
-        "channel": 6,
-        "security": "WPA3",
-      ],
-    ]
-
-    resolve(simulatedNetworks)
+    fetchCurrentNetworks { networks in
+      if networks.isEmpty {
+        resolve(self.simulatedNetworks())
+      } else {
+        resolve(networks)
+      }
+    }
   }
 
   @objc(startCapture:resolver:rejecter:)
@@ -100,44 +91,48 @@ class WiFiSniffer: RCTEventEmitter, CLLocationManagerDelegate {
   }
 
   private func scheduleSimulatedPackets() {
-    let packets: [[String: Any]] = [
-      [
-        "timestamp": Date().timeIntervalSince1970,
-        "type": "EAPOL",
-        "bssid": "AA:BB:CC:DD:EE:FF",
-        "clientMac": "11:22:33:44:55:66",
-        "data": "base64packet1",
-        "message": 1,
-      ],
-      [
-        "timestamp": Date().timeIntervalSince1970 + 0.1,
-        "type": "EAPOL",
-        "bssid": "AA:BB:CC:DD:EE:FF",
-        "clientMac": "11:22:33:44:55:66",
-        "data": "base64packet2",
-        "message": 2,
-      ],
-      [
-        "timestamp": Date().timeIntervalSince1970 + 0.2,
-        "type": "EAPOL",
-        "bssid": "AA:BB:CC:DD:EE:FF",
-        "clientMac": "11:22:33:44:55:66",
-        "data": "base64packet3",
-        "message": 3,
-      ],
-      [
-        "timestamp": Date().timeIntervalSince1970 + 0.3,
-        "type": "EAPOL",
-        "bssid": "AA:BB:CC:DD:EE:FF",
-        "clientMac": "11:22:33:44:55:66",
-        "data": "base64packet4",
-        "message": 4,
-      ],
+    let frames: [(message: Int, data: String, fromAp: Bool)] = [
+      (
+        1,
+        "CAAAOhEiM0RVZqq7zN3u/6q7zN3u/xAAqqoDAAAAiI4CAwBkABgAAAAAAAAAAAABISEhISEhISEhISEhISEhISEhISEhISEhISEhISEhISEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADAUAQAAD6wEAQAAD6wEAQAAD6wCAAAAAA==",
+        true
+      ),
+      (
+        2,
+        "CAAAOqq7zN3u/xEiM0RVZqq7zN3u/xAAqqoDAAAAiI4CAwB0AQkAEAAAAAAAAAACIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKurq6urq6urq6urq6urq6swFAEAAA+sBAEAAA+sBAEAAA+sAgAAAAA=",
+        false
+      ),
+      (
+        3,
+        "CAAAOhEiM0RVZqq7zN3u/6q7zN3u/xAAqqoDAAAAiI4CAwB0ARkAEAAAAAAAAAADIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKurq6urq6urq6urq6urq6swFAEAAA+sBAEAAA+sBAEAAA+sAgAAAAA=",
+        true
+      ),
+      (
+        4,
+        "CAAAOqq7zN3u/xEiM0RVZqq7zN3u/xAAqqoDAAAAiI4CAwB0AQsAEAAAAAAAAAAEJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKurq6urq6urq6urq6urq6swFAEAAA+sBAEAAA+sBAEAAA+sAgAAAAA=",
+        false
+      ),
     ]
 
-    for (index, packet) in packets.enumerated() {
-      captureQueue.asyncAfter(deadline: .now() + .seconds(index)) { [weak self] in
+    let start = Date().timeIntervalSince1970
+    for (index, frame) in frames.enumerated() {
+      captureQueue.asyncAfter(deadline: .now() + .milliseconds(index * 600)) { [weak self] in
         guard let self = self, self.isObserving else { return }
+        let timestamp = start + Double(index) * 0.6
+        let rawData = Data(base64Encoded: frame.data) ?? Data()
+        let packet: [String: Any] = [
+          "timestamp": timestamp,
+          "type": "EAPOL",
+          "bssid": "AA:BB:CC:DD:EE:FF",
+          "source": frame.fromAp ? "AA:BB:CC:DD:EE:FF" : "11:22:33:44:55:66",
+          "destination": frame.fromAp ? "11:22:33:44:55:66" : "AA:BB:CC:DD:EE:FF",
+          "clientMac": "11:22:33:44:55:66",
+          "data": frame.data,
+          "signal": frame.fromAp ? -52 : -55,
+          "channel": 1,
+          "rawLength": rawData.count,
+          "message": frame.message,
+        ]
         self.emitOnMain("packetCaptured", body: packet)
       }
     }
@@ -161,7 +156,7 @@ class WiFiSniffer: RCTEventEmitter, CLLocationManagerDelegate {
     resolver resolve: @escaping RCTPromiseResolveBlock,
     rejecter reject: @escaping RCTPromiseRejectBlock
   ) {
-    captureQueue.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+    captureQueue.async { [weak self] in
       guard let self = self, self.isObserving else {
         DispatchQueue.main.async {
           resolve(false)
@@ -169,16 +164,24 @@ class WiFiSniffer: RCTEventEmitter, CLLocationManagerDelegate {
         return
       }
 
-      let packet: [String: Any] = [
-        "timestamp": Date().timeIntervalSince1970,
-        "type": "DEAUTH",
-        "bssid": bssid,
-        "clientMac": clientMac,
-        "data": "deauth-base64-packet",
-        "count": count.intValue,
-      ]
-      self.emitOnMain("packetCaptured", body: packet)
-      DispatchQueue.main.async {
+      let transmissions = max(1, count.intValue)
+      for attempt in 0..<transmissions {
+        let delay = DispatchTimeInterval.milliseconds(attempt * 120)
+        self.captureQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
+          guard let self = self, self.isObserving else { return }
+          let payload: [String: Any] = [
+            "timestamp": Date().timeIntervalSince1970,
+            "type": "DEAUTH",
+            "bssid": bssid,
+            "clientMac": clientMac,
+            "count": transmissions,
+            "sequence": attempt + 1,
+          ]
+          self.emitOnMain("packetCaptured", body: payload)
+        }
+      }
+
+      DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(transmissions * 120 + 50)) {
         resolve(true)
       }
     }
@@ -215,5 +218,105 @@ class WiFiSniffer: RCTEventEmitter, CLLocationManagerDelegate {
       "locationPermission",
       body: ["status": permissionStatusString(manager.authorizationStatus)]
     )
+  }
+}
+
+extension WiFiSniffer {
+  private func fetchCurrentNetworks(completion: @escaping ([[String: Any]]) -> Void) {
+    var results = networksFromCaptive()
+
+    guard #available(iOS 14.0, *) else {
+      completion(results)
+      return
+    }
+
+    NEHotspotNetwork.fetchCurrent { network in
+      if let network = network {
+        var entry: [String: Any] = [
+          "bssid": network.bssid,
+          "ssid": network.ssid,
+          "signal": self.signalStrengthToDbm(network.signalStrength),
+          "channel": network.channelNumber,
+          "security": network.isSecure ? "Secured" : "Open",
+          "frequency": self.frequency(for: network.channelNumber),
+          "capabilities": network.isSecure ? "802.11 security enabled" : "802.11 open",
+        ]
+
+        if let autoJoin = network.didAutoJoin { entry["autoJoin"] = autoJoin }
+        if let cachedIndex = results.firstIndex(where: { ($0["bssid"] as? String) == network.bssid }) {
+          results[cachedIndex] = entry
+        } else {
+          results.append(entry)
+        }
+      }
+
+      completion(results)
+    }
+  }
+
+  private func networksFromCaptive() -> [[String: Any]] {
+    guard let interfaces = CNCopySupportedInterfaces() as? [String] else {
+      return []
+    }
+
+    return interfaces.compactMap { interfaceName -> [String: Any]? in
+      guard
+        let info = CNCopyCurrentNetworkInfo(interfaceName as CFString) as NSDictionary?,
+        let ssid = info[kCNNetworkInfoKeySSID as String] as? String,
+        let bssid = info[kCNNetworkInfoKeyBSSID as String] as? String
+      else {
+        return nil
+      }
+
+      return [
+        "bssid": bssid,
+        "ssid": ssid,
+        "signal": -62,
+        "channel": 0,
+        "security": "Unknown",
+        "frequency": 0,
+        "capabilities": "802.11",
+      ]
+    }
+  }
+
+  private func simulatedNetworks() -> [[String: Any]] {
+    return [
+      [
+        "bssid": "AA:BB:CC:DD:EE:FF",
+        "ssid": "Simulated Lab",
+        "signal": -55,
+        "channel": 1,
+        "security": "WPA2",
+        "frequency": 2412,
+        "capabilities": "WPA2-PSK CCMP",
+      ],
+      [
+        "bssid": "11:22:33:44:55:66",
+        "ssid": "Simulated Field",
+        "signal": -67,
+        "channel": 44,
+        "security": "WPA3",
+        "frequency": 5220,
+        "capabilities": "WPA3-SAE GCMP",
+      ],
+    ]
+  }
+
+  private func signalStrengthToDbm(_ strength: Double) -> Int {
+    let clamped = max(0.0, min(1.0, strength))
+    return Int(round(clamped * 50.0)) - 100
+  }
+
+  private func frequency(for channel: Int) -> Int {
+    if channel == 0 {
+      return 0
+    }
+
+    if channel <= 14 {
+      return 2407 + channel * 5
+    }
+
+    return 5000 + channel * 5
   }
 }

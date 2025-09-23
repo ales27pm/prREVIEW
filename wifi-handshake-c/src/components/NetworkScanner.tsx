@@ -14,10 +14,12 @@ import type { WiFiNetwork } from '@/types/WiFiSniffer';
 
 interface NetworkScannerProps {
   onNetworkSelect: (network: WiFiNetwork) => void;
+  onOpenHistory: () => void;
 }
 
 export const NetworkScanner: React.FC<NetworkScannerProps> = ({
   onNetworkSelect,
+  onOpenHistory,
 }) => {
   const [networks, setNetworks] = useState<WiFiNetwork[]>([]);
   const [scanning, setScanning] = useState(false);
@@ -71,21 +73,30 @@ export const NetworkScanner: React.FC<NetworkScannerProps> = ({
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity
-        style={[styles.scanButton, scanning && styles.scanButtonDisabled]}
-        onPress={startScan}
-        disabled={scanning}
-        accessibilityRole="button"
-      >
-        <Text style={styles.scanButtonText}>
-          {scanning ? 'Scanning…' : 'Scan Networks'}
-        </Text>
-        {lastUpdated && (
-          <Text style={styles.scanSubtitle}>
-            Updated {new Date(lastUpdated).toLocaleTimeString()}
+      <View style={styles.actionsRow}>
+        <TouchableOpacity
+          style={[styles.scanButton, scanning && styles.scanButtonDisabled]}
+          onPress={startScan}
+          disabled={scanning}
+          accessibilityRole="button"
+        >
+          <Text style={styles.scanButtonText}>
+            {scanning ? 'Scanning…' : 'Scan Networks'}
           </Text>
-        )}
-      </TouchableOpacity>
+          {lastUpdated && (
+            <Text style={styles.scanSubtitle}>
+              Updated {new Date(lastUpdated).toLocaleTimeString()}
+            </Text>
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.historyButton}
+          onPress={onOpenHistory}
+          accessibilityRole="button"
+        >
+          <Text style={styles.historyButtonText}>History</Text>
+        </TouchableOpacity>
+      </View>
 
       <FlatList
         data={networks}
@@ -113,12 +124,18 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
   },
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 12,
+  },
   scanButton: {
     backgroundColor: '#007AFF',
     padding: 12,
     borderRadius: 8,
     alignItems: 'center',
-    marginBottom: 16,
+    flex: 1,
   },
   scanButtonDisabled: {
     opacity: 0.6,
@@ -132,6 +149,17 @@ const styles = StyleSheet.create({
     color: '#F2F2F2',
     fontSize: 12,
     marginTop: 4,
+  },
+  historyButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#34C759',
+  },
+  historyButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
   list: {
     flex: 1,

@@ -7,6 +7,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -47,6 +48,8 @@ export const HandshakeCapture: React.FC<HandshakeCaptureProps> = ({
       WiFiSnifferService.getCaptureState().parsedHandshake
     );
   const [handshakeAlerted, setHandshakeAlerted] = useState(false);
+  const [deauthCount, setDeauthCount] = useState('10');
+  const [clientMac, setClientMac] = useState('FF:FF:FF:FF:FF:FF');
 
   useEffect(() => {
     const packetSubscription = DeviceEventEmitter.addListener(
@@ -64,6 +67,13 @@ export const HandshakeCapture: React.FC<HandshakeCaptureProps> = ({
       }
     );
 
+    const networkSubscription = DeviceEventEmitter.addListener(
+      'networkStatus',
+      () => {
+        setCaptureState(WiFiSnifferService.getCaptureState());
+      }
+    );
+
     const interval = setInterval(() => {
       setCaptureState(WiFiSnifferService.getCaptureState());
       setParsedHandshake(WiFiSnifferService.getCaptureState().parsedHandshake);
@@ -72,6 +82,7 @@ export const HandshakeCapture: React.FC<HandshakeCaptureProps> = ({
     return () => {
       packetSubscription.remove();
       handshakeSubscription.remove();
+      networkSubscription.remove();
       clearInterval(interval);
     };
   }, []);
@@ -124,45 +135,51 @@ export const HandshakeCapture: React.FC<HandshakeCaptureProps> = ({
     }
   }, []);
 
-  const handleSendDeauth = useCallback(() => {
+  const handleSendDeauth = useCallback(async () => {
     if (!selectedNetwork) {
+      Alert.alert('Select Network', 'Choose a network before sending frames.');
       return;
     }
 
-    Alert.alert(
-      'Send Deauthentication',
-      `Send deauthentication frames to ${selectedNetwork.ssid}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Send',
-          style: 'destructive',
-          onPress: async () => {
-            setIsBusy(true);
-            try {
-              const success = await WiFiSnifferService.sendDeauth(
-                selectedNetwork.bssid,
-                'FF:FF:FF:FF:FF:FF',
-                10
-              );
-              if (success) {
-                Alert.alert('Success', 'Deauthentication frames transmitted');
-              } else {
-                Alert.alert(
-                  'Failed',
-                  'Could not transmit deauthentication frames'
-                );
-              }
-            } catch (error) {
-              Alert.alert('Error', String(error));
-            } finally {
-              setIsBusy(false);
-            }
-          },
-        },
-      ]
-    );
-  }, [selectedNetwork]);
+    const normalizedCount = Number.parseInt(deauthCount, 10);
+    if (!Number.isFinite(normalizedCount) || normalizedCount <= 0) {
+      Alert.alert('Invalid Count', 'Enter a positive number of frames.');
+      return;
+    }
+
+    const normalizedMac = clientMac.trim().toUpperCase();
+    const macPattern = /^([0-9A-F]{2}:){5}[0-9A-F]{2}$/;
+    if (!macPattern.test(normalizedMac)) {
+      Alert.alert(
+        'Invalid MAC',
+        'Enter a client MAC in the format AA:BB:CC:DD:EE:FF.'
+      );
+      return;
+    }
+
+    setIsBusy(true);
+    try {
+      const success = await WiFiSnifferService.sendDeauth(
+        selectedNetwork.bssid,
+        normalizedMac,
+        normalizedCount
+      );
+      if (success) {
+        Alert.alert(
+          'Deauthentication Sent',
+          `Transmitted ${normalizedCount} frame${
+            normalizedCount > 1 ? 's' : ''
+          } to ${normalizedMac}`
+        );
+      } else {
+        Alert.alert('Transmission Failed', 'Unable to transmit frames.');
+      }
+    } catch (error) {
+      Alert.alert('Deauth Failed', String(error));
+    } finally {
+      setIsBusy(false);
+    }
+  }, [clientMac, deauthCount, selectedNetwork]);
 
   const handleExportHandshake = useCallback(async () => {
     setIsBusy(true);
@@ -234,14 +251,57 @@ export const HandshakeCapture: React.FC<HandshakeCaptureProps> = ({
           canExport={canExport}
           onStartCapture={handleStartCapture}
           onStopCapture={handleStopCapture}
-          onSendDeauth={handleSendDeauth}
           onExportHandshake={handleExportHandshake}
         />
+
+        <View style={styles.deauthContainer}>
+          <Text style={styles.sectionTitle}>Deauthentication Controls</Text>
+          <View style={styles.deauthRow}>
+            <View style={styles.deauthField}>
+              <Text style={styles.deauthLabel}>Frame Count</Text>
+              <TextInput
+                value={deauthCount}
+                onChangeText={setDeauthCount}
+                keyboardType="number-pad"
+                placeholder="10"
+                placeholderTextColor="#AEAEB2"
+                style={styles.deauthInput}
+                editable={!isBusy}
+              />
+            </View>
+            <View style={styles.deauthField}>
+              <Text style={styles.deauthLabel}>Client MAC</Text>
+              <TextInput
+                value={clientMac}
+                onChangeText={(value) => setClientMac(value.toUpperCase())}
+                placeholder="FF:FF:FF:FF:FF:FF"
+                placeholderTextColor="#AEAEB2"
+                style={styles.deauthInput}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                editable={!isBusy}
+              />
+            </View>
+          </View>
+          <TouchableOpacity
+            style={[
+              styles.deauthButton,
+              (!hasSelectedNetwork || isBusy) && styles.disabledButton,
+            ]}
+            onPress={handleSendDeauth}
+            disabled={!hasSelectedNetwork || isBusy}
+            accessibilityRole="button"
+          >
+            <Text style={styles.deauthButtonText}>Send Deauth Frames</Text>
+          </TouchableOpacity>
+        </View>
 
         <CaptureStats
           isCapturing={captureState.isCapturing}
           packetCount={packetCount}
           hasCompleteHandshake={captureState.hasCompleteHandshake}
+          networkStatus={captureState.networkStatus}
+          captureStartedAt={captureState.captureStartedAt}
         />
 
         <HandshakeVisualization
@@ -331,6 +391,55 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 3,
     elevation: 2,
+  },
+  deauthContainer: {
+    backgroundColor: 'white',
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+    gap: 12,
+  },
+  deauthRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  deauthField: {
+    flex: 1,
+  },
+  deauthLabel: {
+    fontSize: 12,
+    color: '#8E8E93',
+    marginBottom: 6,
+    fontWeight: '600',
+  },
+  deauthInput: {
+    borderWidth: 1,
+    borderColor: '#E5E5E7',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
+    color: '#1C1C1E',
+  },
+  deauthButton: {
+    backgroundColor: '#FF3B30',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  deauthButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
   sectionTitle: {
     fontSize: 16,

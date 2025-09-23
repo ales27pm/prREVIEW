@@ -1,5 +1,7 @@
 import { DeviceEventEmitter, Platform } from 'react-native';
 import { PERMISSIONS, RESULTS, request } from 'react-native-permissions';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import RNFS from 'react-native-fs';
 import { Buffer } from 'buffer';
 import PacketParserService from '@/services/PacketParserService';
 import ExportService, { ExportOptions } from '@/services/ExportService';
@@ -16,8 +18,19 @@ import { parseChannelFromFrequency } from '@/utils/formatters';
 
 type Subscription = { remove: () => void };
 
+const HISTORY_STORAGE_KEY = '@wifi-handshake/history';
+const HISTORY_UPDATED_EVENT = 'handshakeHistoryUpdated';
+const NETWORK_STATUS_EVENT = 'networkStatus';
+
 export interface HandshakeCompletePayload {
   handshake: ParsedHandshake;
+}
+
+export interface NetworkStatus {
+  available: boolean;
+  interfaceType: string;
+  isExpensive?: boolean;
+  [key: string]: unknown;
 }
 
 export interface CaptureState {
@@ -29,6 +42,20 @@ export interface CaptureState {
   interfaceStats: InterfaceStats | null;
   channel: number;
   captureStartedAt: number | null;
+  networkStatus: NetworkStatus | null;
+}
+
+export interface HistoryItem {
+  id: string;
+  timestamp: string;
+  path: string;
+  bssid: string;
+  ssid?: string;
+  clientMac?: string;
+  security: string;
+  channel: number;
+  signal: number;
+  size: number;
 }
 
 class WiFiSnifferService {
@@ -41,6 +68,7 @@ class WiFiSnifferService {
     interfaceStats: null,
     channel: 1,
     captureStartedAt: null,
+    networkStatus: null,
   };
 
   private eventSubscriptions: Subscription[] = [];
@@ -48,6 +76,10 @@ class WiFiSnifferService {
   private handshakeListeners = new Set<
     (payload: HandshakeCompletePayload) => void
   >();
+
+  private history: HistoryItem[] = [];
+
+  private historyLoaded = false;
 
   async initialize(): Promise<void> {
     try {
@@ -62,6 +94,7 @@ class WiFiSnifferService {
       );
     }
 
+    await this.loadHistoryFromStorage();
     this.setupEventListeners();
   }
 
@@ -96,6 +129,15 @@ class WiFiSnifferService {
         }
       )
     );
+
+    this.eventSubscriptions.push(
+      WiFiSnifferEvents.addListener(
+        NETWORK_STATUS_EVENT,
+        (status: NetworkStatus) => {
+          this.handleNetworkStatus(status);
+        }
+      )
+    );
   }
 
   private handlePacketCaptured(packetData: HandshakePacket): void {
@@ -122,6 +164,15 @@ class WiFiSnifferService {
     };
 
     this.emitHandshakeComplete(enriched);
+  }
+
+  private handleNetworkStatus(status: NetworkStatus): void {
+    this.captureState = {
+      ...this.captureState,
+      networkStatus: status,
+    };
+
+    DeviceEventEmitter.emit(NETWORK_STATUS_EVENT, status);
   }
 
   private evaluateHandshakeCompletion(latestPacket: HandshakePacket): void {
@@ -314,7 +365,9 @@ class WiFiSnifferService {
     }
 
     const enriched = this.enrichHandshake(handshake);
-    return ExportService.exportHandshake(enriched, options);
+    const filepath = await ExportService.exportHandshake(enriched, options);
+    await this.addHistoryEntry(enriched, filepath);
+    return filepath;
   }
 
   async getInterfaceStats(): Promise<InterfaceStats | null> {
@@ -366,6 +419,113 @@ class WiFiSnifferService {
     return () => {
       this.handshakeListeners.delete(listener);
     };
+  }
+
+  async getHistory(): Promise<HistoryItem[]> {
+    await this.loadHistoryFromStorage();
+    return [...this.history];
+  }
+
+  async clearHistory(): Promise<void> {
+    await this.loadHistoryFromStorage();
+    await Promise.all(
+      this.history.map((entry) =>
+        RNFS.unlink(entry.path).catch(() => undefined)
+      )
+    );
+    this.history = [];
+    await AsyncStorage.removeItem(HISTORY_STORAGE_KEY);
+    DeviceEventEmitter.emit(HISTORY_UPDATED_EVENT, []);
+  }
+
+  async deleteHistoryItem(id: string): Promise<void> {
+    await this.loadHistoryFromStorage();
+    const entry = this.history.find((item) => item.id === id);
+    if (entry) {
+      try {
+        await RNFS.unlink(entry.path);
+      } catch (error) {
+        console.warn('Failed to delete exported handshake file:', error);
+      }
+    }
+
+    this.history = this.history.filter((item) => item.id !== id);
+    await this.persistHistory();
+    DeviceEventEmitter.emit(HISTORY_UPDATED_EVENT, [...this.history]);
+  }
+
+  onHistoryUpdated(listener: (history: HistoryItem[]) => void): () => void {
+    const subscription = DeviceEventEmitter.addListener(
+      HISTORY_UPDATED_EVENT,
+      listener
+    );
+    return () => {
+      subscription.remove();
+    };
+  }
+
+  private async addHistoryEntry(
+    handshake: ParsedHandshake,
+    filepath: string
+  ): Promise<void> {
+    await this.loadHistoryFromStorage();
+
+    let size = 0;
+    try {
+      const stats = await RNFS.stat(filepath);
+      size = Number(stats.size ?? 0);
+    } catch (error) {
+      console.warn('Failed to read handshake file stats:', error);
+    }
+
+    const entry: HistoryItem = {
+      id: `${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      path: filepath,
+      bssid: handshake.bssid,
+      ssid: handshake.ssid,
+      clientMac: handshake.clientMac,
+      security: handshake.securityType,
+      channel: handshake.channel,
+      signal: handshake.signal,
+      size,
+    };
+
+    this.history.push(entry);
+    await this.persistHistory();
+    DeviceEventEmitter.emit(HISTORY_UPDATED_EVENT, [...this.history]);
+  }
+
+  private async loadHistoryFromStorage(): Promise<void> {
+    if (this.historyLoaded) {
+      return;
+    }
+
+    try {
+      const raw = await AsyncStorage.getItem(HISTORY_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as HistoryItem[];
+        if (Array.isArray(parsed)) {
+          this.history = parsed;
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load handshake history:', error);
+      this.history = [];
+    }
+
+    this.historyLoaded = true;
+  }
+
+  private async persistHistory(): Promise<void> {
+    try {
+      await AsyncStorage.setItem(
+        HISTORY_STORAGE_KEY,
+        JSON.stringify(this.history)
+      );
+    } catch (error) {
+      console.error('Failed to persist handshake history:', error);
+    }
   }
 }
 
