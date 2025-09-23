@@ -1,9 +1,9 @@
 import React, { forwardRef, useImperativeHandle } from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
-import type { DeepPacketEvent } from '../../../../specs/WifiCaptureSpec';
+import type { DeepPacketEvent } from 'specs/WifiCaptureSpec';
 import usePackets, { type UsePacketsResult } from '../usePackets';
 
-jest.mock('../../../../specs/WifiCaptureSpec', () => {
+jest.mock('specs/WifiCaptureSpec', () => {
   const { EventEmitter } = require('events');
   const emitter = new EventEmitter();
   return {

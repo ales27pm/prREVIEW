@@ -3,7 +3,7 @@ import { decode } from 'base64-arraybuffer';
 import WifiCapture, {
   WifiCaptureEvents,
   type DeepPacketEvent,
-} from '../../../specs/WifiCaptureSpec';
+} from 'specs/WifiCaptureSpec';
 
 export interface PacketPreview {
   id: string;
