@@ -38,6 +38,10 @@ export interface BasePacket {
   frequency?: number;
   data?: string;
   clientMac?: string;
+  ssid?: string;
+  security?: string;
+  reasonCode?: number;
+  count?: number;
 }
 
 export interface HandshakePacket extends BasePacket {

@@ -1,7 +1,0 @@
-{
-  "method": "development",
-  "teamID": "YOUR_TEAM_ID",
-  "provisioningProfiles": {
-    "com.example.wifihandshakecapture": "WiFiHandshakeCapture Provisioning Profile"
-  }
-}
