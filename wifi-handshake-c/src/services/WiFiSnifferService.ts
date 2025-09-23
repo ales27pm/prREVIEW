@@ -21,6 +21,7 @@ type Subscription = { remove: () => void };
 const HISTORY_STORAGE_KEY = '@wifi-handshake/history';
 const HISTORY_UPDATED_EVENT = 'handshakeHistoryUpdated';
 const NETWORK_STATUS_EVENT = 'networkStatus';
+const LOCATION_PERMISSION_EVENT = 'locationPermission';
 
 export interface HandshakeCompletePayload {
   handshake: ParsedHandshake;
@@ -135,6 +136,15 @@ class WiFiSnifferService {
         NETWORK_STATUS_EVENT,
         (status: NetworkStatus) => {
           this.handleNetworkStatus(status);
+        }
+      )
+    );
+
+    this.eventSubscriptions.push(
+      WiFiSnifferEvents.addListener(
+        LOCATION_PERMISSION_EVENT,
+        (status: unknown) => {
+          DeviceEventEmitter.emit(LOCATION_PERMISSION_EVENT, status);
         }
       )
     );
