@@ -156,7 +156,16 @@ class WiFiSnifferService {
   }
 
   private handleHandshakeComplete(handshake: ParsedHandshake): void {
-    const enriched = this.enrichHandshake(handshake);
+    const normalizedPackets =
+      handshake.packets?.map((packet) => this.normalizePacket(packet)) ?? [];
+
+    const normalizedHandshake: ParsedHandshake = {
+      ...handshake,
+      packets: normalizedPackets,
+      isComplete: handshake.isComplete ?? true,
+    };
+
+    const enriched = this.enrichHandshake(normalizedHandshake);
     this.captureState = {
       ...this.captureState,
       hasCompleteHandshake: true,

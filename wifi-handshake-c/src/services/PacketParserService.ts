@@ -2,6 +2,12 @@ import { Buffer } from 'buffer';
 import type { HandshakePacket, ParsedHandshake } from '@/types/WiFiSniffer';
 
 const MIN_EAPOL_FRAME_LENGTH = 99;
+const REQUIRED_HANDSHAKE_MESSAGES: ReadonlyArray<1 | 2 | 3 | 4> = [
+  1,
+  2,
+  3,
+  4,
+];
 
 export class PacketParserService {
   private static readonly EAPOL_VERSION = 0x02;
@@ -133,8 +139,12 @@ export class PacketParserService {
       return null;
     }
 
-    const messageSet = new Set(validPackets.map((packet) => packet.message));
-    if (![1, 2, 3, 4].every((msg) => messageSet.has(msg))) {
+    const messageSet = new Set(
+      validPackets
+        .map((packet) => packet.message)
+        .filter((message): message is 1 | 2 | 3 | 4 => message !== undefined)
+    );
+    if (!REQUIRED_HANDSHAKE_MESSAGES.every((msg) => messageSet.has(msg))) {
       return null;
     }
 

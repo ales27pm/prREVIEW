@@ -11,6 +11,9 @@ class WiFiSniffer: RCTEventEmitter, CLLocationManagerDelegate {
   private let captureQueue = DispatchQueue(label: "com.wifihandshake.capture", qos: .utility)
   private var pathMonitor: NWPathMonitor?
   private var isObserving = false
+  private var currentChannel: Int = 1
+  private var capturedPacketCount: Int = 0
+  private var captureStartTimestamp: TimeInterval?
 
   override init() {
     super.init()
@@ -66,9 +69,10 @@ class WiFiSniffer: RCTEventEmitter, CLLocationManagerDelegate {
     }
   }
 
-  @objc(startCapture:resolver:rejecter:)
+  @objc(startCapture:channel:resolver:rejecter:)
   func startCapture(
     _ interfaceName: String,
+    channel: NSNumber,
     resolver resolve: @escaping RCTPromiseResolveBlock,
     rejecter reject: @escaping RCTPromiseRejectBlock
   ) {
@@ -86,58 +90,126 @@ class WiFiSniffer: RCTEventEmitter, CLLocationManagerDelegate {
     monitor.start(queue: captureQueue)
     pathMonitor = monitor
 
+    currentChannel = max(1, channel.intValue)
+    capturedPacketCount = 0
+    captureStartTimestamp = Date().timeIntervalSince1970
+
+    emitOnMain(
+      "networkStatus",
+      body: [
+        "available": true,
+        "interfaceType": "WiFi",
+        "isExpensive": false,
+      ]
+    )
+
     scheduleSimulatedPackets()
-    resolve("Capture started")
+    resolve(true)
   }
 
   private func scheduleSimulatedPackets() {
     let frames: [(message: Int, data: String, fromAp: Bool)] = [
       (
         1,
-        "CAAAOhEiM0RVZqq7zN3u/6q7zN3u/xAAqqoDAAAAiI4CAwBkABgAAAAAAAAAAAABISEhISEhISEhISEhISEhISEhISEhISEhISEhISEhISEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADAUAQAAD6wEAQAAD6wEAQAAD6wCAAAAAA==",
+        "CAAAOhEiM0RVZqq7zN3u/6q7zN3u/xAAqqoDAAAAiI4CAwBkABgAAAAAAAAAAAABISEhISEhISEhISEhISEhISEhISEhISEhISEhISEhISEAAAAAAAAAAAA" +
+          "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADAUAQAAD6wEAQAAD6wEAQAAD6wCAAAAAA==",
         true
       ),
       (
         2,
-        "CAAAOqq7zN3u/xEiM0RVZqq7zN3u/xAAqqoDAAAAiI4CAwB0AQkAEAAAAAAAAAACIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKurq6urq6urq6urq6urq6swFAEAAA+sBAEAAA+sBAEAAA+sAgAAAAA=",
+        "CAAAOqq7zN3u/xEiM0RVZqq7zN3u/xAAqqoDAAAAiI4CAwB0AQkAEAAAAAAAAAACIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIAAAAAA" +
+          "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKurq6urq6urq6urq6urq6swFAEAAA+sBAEAAA+sBAEAAA+sAgAAAAA=",
         false
       ),
       (
         3,
-        "CAAAOhEiM0RVZqq7zN3u/6q7zN3u/xAAqqoDAAAAiI4CAwB0ARkAEAAAAAAAAAADIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKurq6urq6urq6urq6urq6swFAEAAA+sBAEAAA+sBAEAAA+sAgAAAAA=",
+        "CAAAOhEiM0RVZqq7zN3u/6q7zN3u/xAAqqoDAAAAiI4CAwB0ARkAEAAAAAAAAAADIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMAAAAAAAAAAAA" +
+          "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKurq6urq6urq6urq6urq6swFAEAAA+sBAEAAA+sBAEAAA+sAgAAAAA=",
         true
       ),
       (
         4,
-        "CAAAOqq7zN3u/xEiM0RVZqq7zN3u/xAAqqoDAAAAiI4CAwB0AQsAEAAAAAAAAAAEJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKurq6urq6urq6urq6urq6swFAEAAA+sBAEAAA+sBAEAAA+sAgAAAAA=",
+        "CAAAOqq7zN3u/xEiM0RVZqq7zN3u/xAAqqoDAAAAiI4CAwB0AQsAEAAAAAAAAAAEJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQAAAAAAAAAAAA" +
+          "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKurq6urq6urq6urq6urq6swFAEAAA+sBAEAAA+sBAEAAA+sAgAAAAA=",
         false
       ),
     ]
 
+    let bssid = "AA:BB:CC:DD:EE:FF"
+    let clientMac = "11:22:33:44:55:66"
+    let ssid = "Simulated Lab"
     let start = Date().timeIntervalSince1970
+    var handshakePackets: [[String: Any]] = []
+
     for (index, frame) in frames.enumerated() {
       captureQueue.asyncAfter(deadline: .now() + .milliseconds(index * 600)) { [weak self] in
         guard let self = self, self.isObserving else { return }
         let timestamp = start + Double(index) * 0.6
         let rawData = Data(base64Encoded: frame.data) ?? Data()
+        let signal = frame.fromAp ? -52 : -55
         let packet: [String: Any] = [
           "timestamp": timestamp,
           "type": "EAPOL",
-          "bssid": "AA:BB:CC:DD:EE:FF",
-          "source": frame.fromAp ? "AA:BB:CC:DD:EE:FF" : "11:22:33:44:55:66",
-          "destination": frame.fromAp ? "11:22:33:44:55:66" : "AA:BB:CC:DD:EE:FF",
-          "clientMac": "11:22:33:44:55:66",
+          "bssid": bssid,
+          "source": frame.fromAp ? bssid : clientMac,
+          "destination": frame.fromAp ? clientMac : bssid,
+          "clientMac": clientMac,
           "data": frame.data,
-          "signal": frame.fromAp ? -52 : -55,
-          "channel": 1,
+          "signal": signal,
+          "channel": self.currentChannel,
           "rawLength": rawData.count,
           "message": frame.message,
         ]
+
+        handshakePackets.append(packet)
+        self.capturedPacketCount += 1
         self.emitOnMain("packetCaptured", body: packet)
+
+        if index == frames.count - 1 {
+          self.emitSimulatedHandshake(
+            packets: handshakePackets,
+            ssid: ssid,
+            bssid: bssid,
+            clientMac: clientMac,
+            averageSignal: -53,
+            timestamp: timestamp
+          )
+        }
       }
     }
   }
 
+  private func emitSimulatedHandshake(
+    packets: [[String: Any]],
+    ssid: String,
+    bssid: String,
+    clientMac: String,
+    averageSignal: Int,
+    timestamp: Double
+  ) {
+    guard isObserving else { return }
+
+    let handshake: [String: Any] = [
+      "bssid": bssid,
+      "clientMac": clientMac,
+      "timestamp": timestamp,
+      "packets": packets,
+      "isComplete": true,
+      "apMac": bssid,
+      "ssid": ssid,
+      "securityType": "WPA2-PSK",
+      "channel": currentChannel,
+      "signal": averageSignal,
+      "keyVersion": 2,
+      "groupCipher": "CCMP",
+      "pairwiseCipher": "CCMP",
+      "authKeyManagement": ["PSK"],
+      "isCrackable": true,
+      "crackComplexity": "Medium",
+    ]
+
+    emitOnMain("handshakeComplete", body: handshake)
+  }
   @objc(stopCapture:rejecter:)
   func stopCapture(
     _ resolve: @escaping RCTPromiseResolveBlock,
@@ -145,7 +217,38 @@ class WiFiSniffer: RCTEventEmitter, CLLocationManagerDelegate {
   ) {
     pathMonitor?.cancel()
     pathMonitor = nil
-    resolve("Capture stopped")
+    captureStartTimestamp = nil
+    resolve(true)
+  }
+
+  @objc(getInterfaceStats:rejecter:)
+  func getInterfaceStats(
+    _ resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    let captureStartedAt: Any = captureStartTimestamp.map { $0 } ?? NSNull()
+
+    let stats: [String: Any] = [
+      "interfaceName": "en0",
+      "channel": currentChannel,
+      "frequency": frequency(for: currentChannel),
+      "capturedPackets": capturedPacketCount,
+      "droppedPackets": 0,
+      "lastUpdated": Date().timeIntervalSince1970,
+      "captureStartedAt": captureStartedAt,
+    ]
+
+    resolve(stats)
+  }
+
+  @objc(setChannel:resolver:rejecter:)
+  func setChannel(
+    _ channel: NSNumber,
+    resolver resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    currentChannel = max(1, channel.intValue)
+    resolve(true)
   }
 
   @objc(sendDeauth:clientMac:count:resolver:rejecter:)
@@ -165,21 +268,22 @@ class WiFiSniffer: RCTEventEmitter, CLLocationManagerDelegate {
       }
 
       let transmissions = max(1, count.intValue)
-      for attempt in 0..<transmissions {
-        let delay = DispatchTimeInterval.milliseconds(attempt * 120)
-        self.captureQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
-          guard let self = self, self.isObserving else { return }
-          let payload: [String: Any] = [
-            "timestamp": Date().timeIntervalSince1970,
-            "type": "DEAUTH",
-            "bssid": bssid,
-            "clientMac": clientMac,
-            "count": transmissions,
-            "sequence": attempt + 1,
-          ]
-          self.emitOnMain("packetCaptured", body: payload)
+        for attempt in 0..<transmissions {
+          let delay = DispatchTimeInterval.milliseconds(attempt * 120)
+          self.captureQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self = self, self.isObserving else { return }
+            let payload: [String: Any] = [
+              "timestamp": Date().timeIntervalSince1970,
+              "type": "DEAUTH",
+              "bssid": bssid,
+              "clientMac": clientMac,
+              "count": transmissions,
+              "sequence": attempt + 1,
+            ]
+            self.capturedPacketCount += 1
+            self.emitOnMain("packetCaptured", body: payload)
+          }
         }
-      }
 
       DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(transmissions * 120 + 50)) {
         resolve(true)
