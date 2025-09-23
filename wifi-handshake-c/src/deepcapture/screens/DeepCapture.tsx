@@ -9,8 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import WifiCapture from '../../../specs/WifiCaptureSpec';
-import type { CaptureStatistics } from '../../../specs/WifiCaptureSpec';
+import WifiCapture, { type CaptureStatistics } from 'specs/WifiCaptureSpec';
 import PacketItem from '../components/PacketItem';
 import usePackets from '../hooks/usePackets';
 
