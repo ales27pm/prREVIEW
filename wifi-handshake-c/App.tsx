@@ -1,18 +1,70 @@
-import React, { useEffect, useState } from 'react';
-import { SafeAreaView, StatusBar, StyleSheet, View } from 'react-native';
+import 'react-native-gesture-handler';
+import React, { useEffect } from 'react';
+import { StatusBar, StyleSheet } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import {
+  createNativeStackNavigator,
+  type NativeStackScreenProps,
+} from '@react-navigation/native-stack';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import WiFiSnifferService from '@/services/WiFiSnifferService';
 import { NetworkScanner } from '@/components/NetworkScanner';
 import { HandshakeCapture } from '@/components/HandshakeCapture';
+import History from '@/components/History';
 import type { WiFiNetwork } from '@/types/WiFiSniffer';
 
-const App: React.FC = () => {
-  const [selectedNetwork, setSelectedNetwork] = useState<WiFiNetwork | null>(
-    null
-  );
-  const [currentView, setCurrentView] = useState<'scanner' | 'capture'>(
-    'scanner'
-  );
+type RootStackParamList = {
+  Scanner: undefined;
+  Capture: { network: WiFiNetwork };
+  History: undefined;
+};
 
+const Stack = createNativeStackNavigator<RootStackParamList>();
+
+type ScannerScreenProps = NativeStackScreenProps<RootStackParamList, 'Scanner'>;
+
+const ScannerScreen: React.FC<ScannerScreenProps> = ({ navigation }) => {
+  const handleNetworkSelect = (network: WiFiNetwork) => {
+    navigation.navigate('Capture', { network });
+  };
+
+  return (
+    <SafeAreaView style={styles.screen}>
+      <StatusBar barStyle="dark-content" />
+      <NetworkScanner
+        onNetworkSelect={handleNetworkSelect}
+        onOpenHistory={() => navigation.navigate('History')}
+      />
+    </SafeAreaView>
+  );
+};
+
+type CaptureScreenProps = NativeStackScreenProps<RootStackParamList, 'Capture'>;
+
+const CaptureScreen: React.FC<CaptureScreenProps> = ({ route, navigation }) => {
+  const { network } = route.params;
+
+  return (
+    <SafeAreaView style={styles.screen}>
+      <StatusBar barStyle="dark-content" />
+      <HandshakeCapture
+        selectedNetwork={network}
+        onBack={() => navigation.goBack()}
+      />
+    </SafeAreaView>
+  );
+};
+
+type HistoryScreenProps = NativeStackScreenProps<RootStackParamList, 'History'>;
+
+const HistoryScreen: React.FC<HistoryScreenProps> = () => (
+  <SafeAreaView style={styles.screen}>
+    <StatusBar barStyle="dark-content" />
+    <History />
+  </SafeAreaView>
+);
+
+const App: React.FC = () => {
   useEffect(() => {
     WiFiSnifferService.initialize().catch((error) => {
       console.error('App initialization failed:', error);
@@ -23,40 +75,35 @@ const App: React.FC = () => {
     };
   }, []);
 
-  const handleNetworkSelect = (network: WiFiNetwork) => {
-    setSelectedNetwork(network);
-    setCurrentView('capture');
-  };
-
-  const handleBackToScanner = () => {
-    setCurrentView('scanner');
-    setSelectedNetwork(null);
-  };
-
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" />
-      {currentView === 'scanner' ? (
-        <NetworkScanner onNetworkSelect={handleNetworkSelect} />
-      ) : (
-        <View style={styles.captureView}>
-          <HandshakeCapture
-            selectedNetwork={selectedNetwork}
-            onBack={handleBackToScanner}
+    <SafeAreaProvider>
+      <NavigationContainer>
+        <Stack.Navigator>
+          <Stack.Screen
+            name="Scanner"
+            component={ScannerScreen}
+            options={{ headerShown: false }}
           />
-        </View>
-      )}
-    </SafeAreaView>
+          <Stack.Screen
+            name="Capture"
+            component={CaptureScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="History"
+            component={HistoryScreen}
+            options={{ title: 'Handshake History' }}
+          />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
     backgroundColor: '#F2F2F7',
-  },
-  captureView: {
-    flex: 1,
   },
 });
 

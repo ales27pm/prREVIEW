@@ -8,7 +8,6 @@ interface CaptureControlsProps {
   canExport: boolean;
   onStartCapture: () => void;
   onStopCapture: () => void;
-  onSendDeauth: () => void;
   onExportHandshake: () => void;
 }
 
@@ -19,11 +18,9 @@ export const CaptureControls: React.FC<CaptureControlsProps> = ({
   canExport,
   onStartCapture,
   onStopCapture,
-  onSendDeauth,
   onExportHandshake,
 }) => {
   const captureDisabled = isBusy || (!hasSelectedNetwork && !isCapturing);
-  const sendDeauthDisabled = isBusy || !hasSelectedNetwork;
   const exportDisabled = isBusy || !canExport;
 
   return (
@@ -37,19 +34,6 @@ export const CaptureControls: React.FC<CaptureControlsProps> = ({
         <Text style={styles.controlButtonText}>
           {isCapturing ? 'Stop Capture' : 'Start Capture'}
         </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[
-          styles.controlButton,
-          styles.secondaryButton,
-          sendDeauthDisabled && styles.disabledButton,
-        ]}
-        onPress={onSendDeauth}
-        disabled={sendDeauthDisabled}
-        accessibilityRole="button"
-      >
-        <Text style={styles.controlButtonText}>Send Deauth</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
@@ -80,9 +64,6 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     backgroundColor: '#007AFF',
-  },
-  secondaryButton: {
-    backgroundColor: '#FF3B30',
   },
   exportButton: {
     backgroundColor: '#34C759',
