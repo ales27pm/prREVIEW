@@ -24,6 +24,7 @@ final class WifiCaptureImpl: NSObject {
   private var filterString: String?
   private var filterData: Data?
   private var handshakeInterface: String?
+  private lazy var cachedExtensionBundleIdentifier: String? = Self.locateExtensionBundleIdentifier()
 
   private override init() {
     queue = DispatchQueue(label: "WifiCapture.DeepCapture", qos: .utility)
@@ -108,14 +109,14 @@ final class WifiCaptureImpl: NSObject {
     }
 
     let port = UInt16(value)
-    guard isPortAvailable(port: port) else {
-      logger.error("Requested UDP port \(port, privacy: .public) is already bound")
-      reject("PORT_BOUND", "UDP port \(port) is already in use", nil)
-      return
-    }
 
-    filterString = filter?.isEmpty == true ? nil : filter
-    filterData = filterString?.data(using: .utf8)
+    let normalizedFilter = filter?.isEmpty == true ? nil : filter
+    let normalizedFilterData = normalizedFilter?.data(using: .utf8)
+
+    performOnQueue(wait: true) {
+      self.filterString = normalizedFilter
+      self.filterData = normalizedFilterData
+    }
 
     loadTunnelManager { [weak self] result in
       guard let self else { return }
@@ -123,16 +124,13 @@ final class WifiCaptureImpl: NSObject {
       switch result {
       case .failure(let error):
         self.logger.error("Failed to load tunnel manager: \(error.localizedDescription, privacy: .public)")
-        self.resetState()
-        reject("TUNNEL_LOAD", error.localizedDescription, error)
+        self.handleStartFailure(code: "TUNNEL_LOAD", message: error.localizedDescription, error: error, manager: nil, reject: reject)
       case .success(let manager):
-        self.configure(manager: manager, port: port, filter: self.filterString)
+        self.configure(manager: manager, port: port, filter: normalizedFilter)
         manager.saveToPreferences { saveError in
           if let saveError {
             self.logger.error("Saving tunnel configuration failed: \(saveError.localizedDescription, privacy: .public)")
-            self.cleanupTunnel(manager: manager)
-            self.resetState()
-            reject("TUNNEL_SAVE", saveError.localizedDescription, saveError)
+            self.handleStartFailure(code: "TUNNEL_SAVE", message: saveError.localizedDescription, error: saveError, manager: manager, reject: reject)
             return
           }
 
@@ -140,25 +138,33 @@ final class WifiCaptureImpl: NSObject {
             try manager.connection.startVPNTunnel()
           } catch {
             self.logger.error("Starting VPN tunnel failed: \(error.localizedDescription, privacy: .public)")
-            self.cleanupTunnel(manager: manager)
-            self.resetState()
-            reject("TUNNEL_START", error.localizedDescription, error)
+            self.handleStartFailure(code: "TUNNEL_START", message: error.localizedDescription, error: error, manager: manager, reject: reject)
             return
           }
 
           let sessionId = UUID().uuidString
-          self.tunnelManager = manager
-          self.currentPort = port
-          self.currentSessionId = sessionId
-          self.stats = CaptureStats()
+          self.performOnQueue(wait: true) {
+            self.tunnelManager = manager
+            self.currentPort = port
+            self.currentSessionId = sessionId
+            self.stats = CaptureStats()
+          }
 
           do {
             try self.startUdpListener(port: port)
           } catch {
             self.logger.error("UDP listener failed: \(error.localizedDescription, privacy: .public)")
-            self.cleanupTunnel(manager: manager)
-            self.resetState()
-            reject("UDP_LISTENER", error.localizedDescription, error)
+            if let nwError = error as? NWError, case .posix(let posixError) = nwError, posixError == .EADDRINUSE {
+              self.handleStartFailure(
+                code: "PORT_BOUND",
+                message: "UDP port \(port) is already in use",
+                error: error,
+                manager: manager,
+                reject: reject
+              )
+            } else {
+              self.handleStartFailure(code: "UDP_LISTENER", message: error.localizedDescription, error: error, manager: manager, reject: reject)
+            }
             return
           }
 
@@ -172,7 +178,9 @@ final class WifiCaptureImpl: NSObject {
 
   func stopDeepCapture(withSession sessionId: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
     guard let currentSessionId, currentSessionId == sessionId else {
-      resolve(nil)
+      DispatchQueue.main.async {
+        resolve(nil)
+      }
       return
     }
 
@@ -184,7 +192,9 @@ final class WifiCaptureImpl: NSObject {
     }
 
     resetState()
-    resolve(nil)
+    DispatchQueue.main.async {
+      resolve(nil)
+    }
   }
 
   func stats(forSession sessionId: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
@@ -225,7 +235,7 @@ final class WifiCaptureImpl: NSObject {
 
   private func configure(manager: NETunnelProviderManager, port: UInt16, filter: String?) {
     let protocolConfiguration = NETunnelProviderProtocol()
-    if let identifier = extensionBundleIdentifier() {
+    if let identifier = cachedExtensionBundleIdentifier {
       protocolConfiguration.providerBundleIdentifier = identifier
     } else if let baseIdentifier = Bundle.main.bundleIdentifier {
       protocolConfiguration.providerBundleIdentifier = "\(baseIdentifier).WifiCaptureExtension"
@@ -235,6 +245,10 @@ final class WifiCaptureImpl: NSObject {
       "udpPort": Int(port),
       "filter": filter ?? "",
     ]
+
+    if protocolConfiguration.providerBundleIdentifier == nil {
+      logger.warning("Provider bundle identifier not resolved; tunnel start likely to fail")
+    }
 
     manager.protocolConfiguration = protocolConfiguration
     manager.isEnabled = true
@@ -251,15 +265,17 @@ final class WifiCaptureImpl: NSObject {
   }
 
   private func resetState() {
-    tunnelManager = nil
-    currentPort = 0
-    currentSessionId = nil
-    filterString = nil
-    filterData = nil
-    stats = CaptureStats()
+    performOnQueue(wait: true) {
+      self.tunnelManager = nil
+      self.currentPort = 0
+      self.currentSessionId = nil
+      self.filterString = nil
+      self.filterData = nil
+      self.stats = CaptureStats()
+    }
   }
 
-  private func extensionBundleIdentifier() -> String? {
+  private static func locateExtensionBundleIdentifier() -> String? {
     guard let pluginsURL = Bundle.main.builtInPlugInsURL else {
       return nil
     }
@@ -283,28 +299,6 @@ final class WifiCaptureImpl: NSObject {
     return nil
   }
 
-  private func isPortAvailable(port: UInt16) -> Bool {
-    let socketFD = socket(AF_INET, SOCK_DGRAM, 0)
-    guard socketFD != -1 else {
-      return false
-    }
-
-    var addr = sockaddr_in()
-    addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-    addr.sin_family = sa_family_t(AF_INET)
-    addr.sin_port = CFSwapInt16HostToBig(port)
-    addr.sin_addr = in_addr(s_addr: inet_addr("0.0.0.0"))
-
-    let result = withUnsafePointer(to: &addr) {
-      $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { pointer in
-        Darwin.bind(socketFD, pointer, socklen_t(MemoryLayout<sockaddr_in>.size))
-      }
-    }
-
-    Darwin.close(socketFD)
-    return result == 0
-  }
-
   private func startUdpListener(port: UInt16) throws {
     stopUdpListener()
 
@@ -313,7 +307,7 @@ final class WifiCaptureImpl: NSObject {
     }
 
     let params = NWParameters.udp
-    params.allowLocalEndpointReuse = true
+    params.allowLocalEndpointReuse = false
 
     let listener = try NWListener(using: params, on: nwPort)
     listener.stateUpdateHandler = { [weak self] state in
@@ -350,11 +344,7 @@ final class WifiCaptureImpl: NSObject {
       self.udpListener = nil
     }
 
-    if DispatchQueue.getSpecific(key: queueKey) != nil {
-      cleanup()
-    } else {
-      queue.sync(execute: cleanup)
-    }
+    performOnQueue(wait: true, cleanup)
   }
 
   private func receive(on connection: NWConnection) {
@@ -452,6 +442,42 @@ final class WifiCaptureImpl: NSObject {
       queue.async {
         self.stats.dropped += 1
       }
+    }
+  }
+}
+
+extension WifiCaptureImpl {
+  private func performOnQueue(wait: Bool, _ block: @escaping () -> Void) {
+    if DispatchQueue.getSpecific(key: queueKey) != nil {
+      block()
+    } else if wait {
+      let group = DispatchGroup()
+      group.enter()
+      queue.async {
+        block()
+        group.leave()
+      }
+      group.wait()
+    } else {
+      queue.async(execute: block)
+    }
+  }
+
+  private func handleStartFailure(
+    code: String,
+    message: String,
+    error: Error?,
+    manager: NETunnelProviderManager?,
+    reject: @escaping RCTPromiseRejectBlock
+  ) {
+    if let manager {
+      cleanupTunnel(manager: manager)
+    }
+
+    resetState()
+
+    DispatchQueue.main.async {
+      reject(code, message, error)
     }
   }
 }
