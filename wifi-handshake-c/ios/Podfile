@@ -8,7 +8,8 @@ target 'WiFiHandshakeCapture' do
 
   use_react_native!(
     :path => config['reactNativePath'],
-    :hermes_enabled => true
+    :hermes_enabled => true,
+    :fabric_enabled => true
   )
 
   permissions_path = '../node_modules/react-native-permissions/ios'
@@ -19,6 +20,11 @@ target 'WiFiHandshakeCapture' do
   end
 end
 
+target 'WifiCaptureExtension' do
+  inherit! :complete
+  pod 'React-Core', :path => '../node_modules/react-native/'
+end
+
 post_install do |installer|
-  react_native_post_install(installer)
+  react_native_post_install(installer, :mac_catalyst_enabled => false)
 end

@@ -7,6 +7,6 @@
       "@/*": ["src/*"]
     }
   },
-  "include": ["src", "App.tsx"],
+  "include": ["src", "App.tsx", "specs"],
   "exclude": ["node_modules", "**/__tests__/**/*"]
 }
