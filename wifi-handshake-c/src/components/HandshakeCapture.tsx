@@ -1,47 +1,136 @@
-import React from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  DeviceEventEmitter,
+  Modal,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useHandshakeCapture } from '@/hooks/useHandshakeCapture';
-import type { WiFiNetwork } from '@/types/WiFiSniffer';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { CaptureControls } from '@/components/CaptureControls';
 import { CaptureStats } from '@/components/CaptureStats';
-import { PacketItem } from '@/components/PacketItem';
+import PacketList from '@/components/PacketList';
+import PacketDetail from '@/components/PacketDetail';
+import HandshakeVisualization from '@/components/HandshakeVisualization';
+import WiFiSnifferService, {
+  type CaptureState,
+} from '@/services/WiFiSnifferService';
+import type {
+  HandshakePacket,
+  ParsedHandshake,
+  WiFiNetwork,
+} from '@/types/WiFiSniffer';
 
 interface HandshakeCaptureProps {
   selectedNetwork: WiFiNetwork | null;
-  onBack?: () => void;
+  onBack: () => void;
 }
 
 export const HandshakeCapture: React.FC<HandshakeCaptureProps> = ({
   selectedNetwork,
   onBack,
 }) => {
-  const {
-    captureState,
-    isBusy,
-    startCapture,
-    stopCapture,
-    sendDeauth,
-    exportHandshake,
-  } = useHandshakeCapture(selectedNetwork);
+  const [captureState, setCaptureState] = useState<CaptureState>(
+    WiFiSnifferService.getCaptureState()
+  );
+  const [isBusy, setIsBusy] = useState(false);
+  const [selectedPacket, setSelectedPacket] = useState<
+    HandshakePacket | undefined
+  >(undefined);
+  const [showPacketDetail, setShowPacketDetail] = useState(false);
+  const [parsedHandshake, setParsedHandshake] =
+    useState<ParsedHandshake | null>(
+      WiFiSnifferService.getCaptureState().parsedHandshake
+    );
+  const [handshakeAlerted, setHandshakeAlerted] = useState(false);
+
+  useEffect(() => {
+    const packetSubscription = DeviceEventEmitter.addListener(
+      'packetCaptured',
+      () => {
+        setCaptureState(WiFiSnifferService.getCaptureState());
+      }
+    );
+
+    const handshakeSubscription = DeviceEventEmitter.addListener(
+      'handshakeComplete',
+      (handshake: ParsedHandshake) => {
+        setParsedHandshake(handshake);
+        setCaptureState(WiFiSnifferService.getCaptureState());
+      }
+    );
+
+    const interval = setInterval(() => {
+      setCaptureState(WiFiSnifferService.getCaptureState());
+      setParsedHandshake(WiFiSnifferService.getCaptureState().parsedHandshake);
+    }, 2000);
+
+    return () => {
+      packetSubscription.remove();
+      handshakeSubscription.remove();
+      clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (parsedHandshake && !handshakeAlerted) {
+      Alert.alert(
+        'Complete Handshake Captured',
+        `${parsedHandshake.securityType} handshake from ${parsedHandshake.ssid}`
+      );
+      setHandshakeAlerted(true);
+    }
+  }, [parsedHandshake, handshakeAlerted]);
 
   const packetCount = captureState.capturedPackets.length;
   const hasSelectedNetwork = Boolean(selectedNetwork);
   const canExport = captureState.hasCompleteHandshake && packetCount > 0;
 
-  const handleSendDeauth = () => {
+  const handleStartCapture = useCallback(async () => {
+    if (!selectedNetwork) {
+      Alert.alert(
+        'Select Network',
+        'Please choose a network before capturing packets.'
+      );
+      return;
+    }
+
+    setIsBusy(true);
+    try {
+      await WiFiSnifferService.startCapture('en0', selectedNetwork);
+      setCaptureState(WiFiSnifferService.getCaptureState());
+      setParsedHandshake(null);
+      setHandshakeAlerted(false);
+    } catch (error) {
+      Alert.alert('Capture Failed', String(error));
+    } finally {
+      setIsBusy(false);
+    }
+  }, [selectedNetwork]);
+
+  const handleStopCapture = useCallback(async () => {
+    setIsBusy(true);
+    try {
+      await WiFiSnifferService.stopCapture();
+      setCaptureState(WiFiSnifferService.getCaptureState());
+    } catch (error) {
+      Alert.alert('Error', String(error));
+    } finally {
+      setIsBusy(false);
+    }
+  }, []);
+
+  const handleSendDeauth = useCallback(() => {
     if (!selectedNetwork) {
       return;
     }
 
     Alert.alert(
-      'Send Deauth',
+      'Send Deauthentication',
       `Send deauthentication frames to ${selectedNetwork.ssid}?`,
       [
         { text: 'Cancel', style: 'cancel' },
@@ -49,74 +138,140 @@ export const HandshakeCapture: React.FC<HandshakeCaptureProps> = ({
           text: 'Send',
           style: 'destructive',
           onPress: async () => {
-            const success = await sendDeauth();
-            if (success) {
-              Alert.alert('Deauth Sent', 'Deauthentication frames sent.');
+            setIsBusy(true);
+            try {
+              const success = await WiFiSnifferService.sendDeauth(
+                selectedNetwork.bssid,
+                'FF:FF:FF:FF:FF:FF',
+                10
+              );
+              if (success) {
+                Alert.alert('Success', 'Deauthentication frames transmitted');
+              } else {
+                Alert.alert(
+                  'Failed',
+                  'Could not transmit deauthentication frames'
+                );
+              }
+            } catch (error) {
+              Alert.alert('Error', String(error));
+            } finally {
+              setIsBusy(false);
             }
           },
         },
       ]
     );
-  };
+  }, [selectedNetwork]);
 
-  const handleExportHandshake = async () => {
-    const path = await exportHandshake();
-    if (path) {
-      Alert.alert('Exported', `Handshake saved to: ${path}`);
+  const handleExportHandshake = useCallback(async () => {
+    setIsBusy(true);
+    try {
+      const path = await WiFiSnifferService.exportHandshake({
+        includeAnalysis: true,
+      });
+      if (path) {
+        Alert.alert(
+          'Exported',
+          `Handshake saved to Documents\n${path.split('/').pop()}`
+        );
+      } else {
+        Alert.alert(
+          'No Handshake',
+          'Capture a complete handshake before exporting.'
+        );
+      }
+    } catch (error) {
+      Alert.alert('Export Failed', String(error));
+    } finally {
+      setIsBusy(false);
     }
-  };
+  }, []);
+
+  const handlePacketSelect = useCallback((packet: HandshakePacket) => {
+    setSelectedPacket(packet);
+    setShowPacketDetail(true);
+  }, []);
+
+  const headerNetwork = useMemo(
+    () => selectedNetwork ?? captureState.currentNetwork,
+    [selectedNetwork, captureState.currentNetwork]
+  );
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="dark-content" />
       <View style={styles.header}>
-        <Text style={styles.title}>Handshake Capture</Text>
-        {selectedNetwork && (
-          <View style={styles.networkInfo}>
-            <Text style={styles.networkName}>{selectedNetwork.ssid}</Text>
-            <Text style={styles.networkBssid}>{selectedNetwork.bssid}</Text>
-          </View>
-        )}
-        {onBack && (
-          <TouchableOpacity
-            onPress={onBack}
-            style={styles.backButton}
-            accessibilityRole="button"
-          >
-            <Text style={styles.backButtonText}>Back</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity
+          onPress={onBack}
+          style={styles.backButton}
+          accessibilityRole="button"
+        >
+          <Ionicons name="chevron-back" size={20} color="#007AFF" />
+          <Text style={styles.backText}>Networks</Text>
+        </TouchableOpacity>
+        <View style={styles.headerInfo}>
+          <Text style={styles.title}>
+            {headerNetwork?.ssid ?? 'Select a network'}
+          </Text>
+          {headerNetwork && (
+            <Text style={styles.subtitle}>
+              {headerNetwork.bssid} • {headerNetwork.signal} dBm • CH{' '}
+              {headerNetwork.channel}
+            </Text>
+          )}
+        </View>
       </View>
 
-      <CaptureControls
-        isCapturing={captureState.isCapturing}
-        isBusy={isBusy}
-        hasSelectedNetwork={hasSelectedNetwork}
-        canExport={canExport}
-        onStartCapture={startCapture}
-        onStopCapture={stopCapture}
-        onSendDeauth={handleSendDeauth}
-        onExportHandshake={handleExportHandshake}
-      />
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+      >
+        <CaptureControls
+          isCapturing={captureState.isCapturing}
+          isBusy={isBusy}
+          hasSelectedNetwork={hasSelectedNetwork}
+          canExport={canExport}
+          onStartCapture={handleStartCapture}
+          onStopCapture={handleStopCapture}
+          onSendDeauth={handleSendDeauth}
+          onExportHandshake={handleExportHandshake}
+        />
 
-      <CaptureStats
-        isCapturing={captureState.isCapturing}
-        packetCount={packetCount}
-        hasCompleteHandshake={captureState.hasCompleteHandshake}
-      />
+        <CaptureStats
+          isCapturing={captureState.isCapturing}
+          packetCount={packetCount}
+          hasCompleteHandshake={captureState.hasCompleteHandshake}
+        />
 
-      {packetCount > 0 && (
-        <View style={styles.packetsSection}>
+        <HandshakeVisualization
+          handshake={parsedHandshake}
+          packets={captureState.capturedPackets}
+          isCapturing={captureState.isCapturing}
+        />
+
+        <View style={styles.packetListContainer}>
           <Text style={styles.sectionTitle}>Captured Packets</Text>
-          <ScrollView style={styles.packetsList}>
-            {captureState.capturedPackets.map((packet, index) => (
-              <PacketItem
-                key={`${packet.timestamp}-${index}`}
-                packet={packet}
-              />
-            ))}
-          </ScrollView>
+          <PacketList
+            packets={captureState.capturedPackets}
+            onPacketSelect={handlePacketSelect}
+            selectedPacket={selectedPacket}
+          />
         </View>
-      )}
+      </ScrollView>
+
+      <Modal
+        visible={showPacketDetail}
+        animationType="slide"
+        onRequestClose={() => setShowPacketDetail(false)}
+      >
+        {selectedPacket && (
+          <PacketDetail
+            packet={selectedPacket}
+            onClose={() => setShowPacketDetail(false)}
+          />
+        )}
+      </Modal>
     </View>
   );
 };
@@ -127,55 +282,63 @@ const styles = StyleSheet.create({
     backgroundColor: '#F2F2F7',
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: 'white',
-    padding: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
     borderBottomColor: '#E5E5E7',
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1C1C1E',
-    marginBottom: 8,
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 12,
   },
-  networkInfo: {
-    padding: 8,
-    backgroundColor: '#F2F2F7',
-    borderRadius: 8,
-  },
-  networkName: {
+  backText: {
+    color: '#007AFF',
     fontSize: 16,
     fontWeight: '600',
+    marginLeft: 4,
+  },
+  headerInfo: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '700',
     color: '#1C1C1E',
   },
-  networkBssid: {
+  subtitle: {
     fontSize: 12,
     color: '#8E8E93',
     marginTop: 2,
   },
-  backButton: {
-    position: 'absolute',
-    right: 16,
-    top: 16,
-    padding: 8,
-  },
-  backButtonText: {
-    color: '#007AFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  packetsSection: {
+  content: {
     flex: 1,
-    padding: 16,
+  },
+  contentContainer: {
+    paddingBottom: 24,
+  },
+  packetListContainer: {
+    flex: 1,
+    backgroundColor: 'white',
+    margin: 16,
+    borderRadius: 12,
+    paddingBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '700',
     color: '#1C1C1E',
-    marginBottom: 12,
-  },
-  packetsList: {
-    maxHeight: 320,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
   },
 });
 

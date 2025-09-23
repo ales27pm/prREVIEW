@@ -2,11 +2,13 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   FlatList,
+  RefreshControl,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { formatMacAddress, formatSignalStrength } from '@/utils/formatters';
 import WiFiSnifferService from '@/services/WiFiSnifferService';
 import type { WiFiNetwork } from '@/types/WiFiSniffer';
 
@@ -19,12 +21,14 @@ export const NetworkScanner: React.FC<NetworkScannerProps> = ({
 }) => {
   const [networks, setNetworks] = useState<WiFiNetwork[]>([]);
   const [scanning, setScanning] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
 
   const startScan = useCallback(async () => {
     setScanning(true);
     try {
       const foundNetworks = await WiFiSnifferService.scanNetworks();
       setNetworks(foundNetworks);
+      setLastUpdated(Date.now());
     } catch (error) {
       console.error('Scan failed', error);
       Alert.alert('Scan Failed', 'Unable to scan for networks');
@@ -37,23 +41,33 @@ export const NetworkScanner: React.FC<NetworkScannerProps> = ({
     startScan();
   }, [startScan]);
 
-  const renderNetwork = ({ item }: { item: WiFiNetwork }) => (
-    <TouchableOpacity
-      style={styles.networkItem}
-      onPress={() => onNetworkSelect(item)}
-      accessibilityRole="button"
-    >
-      <View style={styles.networkInfo}>
-        <Text style={styles.ssid}>{item.ssid || 'Hidden network'}</Text>
-        <Text style={styles.bssid}>BSSID: {item.bssid}</Text>
-        <Text style={styles.signal}>Signal: {item.signal} dBm</Text>
-      </View>
-      <View style={styles.security}>
-        <Text style={styles.securityText}>{item.security}</Text>
-        <Text style={styles.channel}>CH {item.channel}</Text>
-      </View>
-    </TouchableOpacity>
-  );
+  const renderNetwork = ({ item }: { item: WiFiNetwork }) => {
+    const ssid = item.ssid || 'Hidden network';
+    const channel = item.channel ? `CH ${item.channel}` : 'Unknown channel';
+    return (
+      <TouchableOpacity
+        style={styles.networkItem}
+        onPress={() => onNetworkSelect(item)}
+        accessibilityRole="button"
+      >
+        <View style={styles.networkInfo}>
+          <Text style={styles.ssid}>{ssid}</Text>
+          <Text style={styles.bssid}>
+            BSSID: {formatMacAddress(item.bssid)}
+          </Text>
+          <Text style={styles.signal}>
+            {formatSignalStrength(item.signal)} {item.signal} dBm
+          </Text>
+          <Text style={styles.capabilities}>{item.capabilities}</Text>
+        </View>
+        <View style={styles.security}>
+          <Text style={styles.securityText}>{item.security}</Text>
+          <Text style={styles.channel}>{channel}</Text>
+          <Text style={styles.frequency}>{item.frequency} MHz</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -66,6 +80,11 @@ export const NetworkScanner: React.FC<NetworkScannerProps> = ({
         <Text style={styles.scanButtonText}>
           {scanning ? 'Scanning…' : 'Scan Networks'}
         </Text>
+        {lastUpdated && (
+          <Text style={styles.scanSubtitle}>
+            Updated {new Date(lastUpdated).toLocaleTimeString()}
+          </Text>
+        )}
       </TouchableOpacity>
 
       <FlatList
@@ -75,6 +94,9 @@ export const NetworkScanner: React.FC<NetworkScannerProps> = ({
         style={styles.list}
         contentContainerStyle={
           networks.length === 0 ? styles.emptyContainer : undefined
+        }
+        refreshControl={
+          <RefreshControl refreshing={scanning} onRefresh={startScan} />
         }
         ListEmptyComponent={
           <Text style={styles.emptyText}>
@@ -106,6 +128,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
+  scanSubtitle: {
+    color: '#F2F2F2',
+    fontSize: 12,
+    marginTop: 4,
+  },
   list: {
     flex: 1,
   },
@@ -118,8 +145,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E5E5E5',
+    borderRadius: 12,
+    backgroundColor: 'white',
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   networkInfo: {
     flex: 1,
@@ -138,7 +171,13 @@ const styles = StyleSheet.create({
   },
   signal: {
     fontSize: 12,
-    color: '#999',
+    color: '#1C1C1E',
+    marginTop: 4,
+  },
+  capabilities: {
+    fontSize: 10,
+    color: '#8E8E93',
+    marginTop: 6,
   },
   security: {
     alignItems: 'flex-end',
@@ -155,6 +194,11 @@ const styles = StyleSheet.create({
   channel: {
     fontSize: 12,
     color: '#666',
+  },
+  frequency: {
+    fontSize: 12,
+    color: '#8E8E93',
+    marginTop: 4,
   },
   emptyText: {
     textAlign: 'center',

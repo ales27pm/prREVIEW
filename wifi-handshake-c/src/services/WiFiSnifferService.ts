@@ -1,37 +1,50 @@
-import { NativeEventEmitter, Platform } from 'react-native';
+import { DeviceEventEmitter, Platform } from 'react-native';
 import { PERMISSIONS, RESULTS, request } from 'react-native-permissions';
-import RNFS from 'react-native-fs';
-import WiFiSnifferModule, {
+import { Buffer } from 'buffer';
+import PacketParserService from '@/services/PacketParserService';
+import ExportService, { ExportOptions } from '@/services/ExportService';
+import {
   WiFiSnifferEvents,
   isWiFiSnifferAvailable,
   type HandshakePacket,
+  type InterfaceStats,
+  type ParsedHandshake,
   type WiFiNetwork,
 } from '@/types/WiFiSniffer';
+import WiFiSnifferModule from '@/types/WiFiSniffer';
+import { parseChannelFromFrequency } from '@/utils/formatters';
 
 type Subscription = { remove: () => void };
 
 export interface HandshakeCompletePayload {
-  bssid?: string;
-  clientMac?: string;
-  packets: HandshakePacket[];
+  handshake: ParsedHandshake;
 }
 
 export interface CaptureState {
   isCapturing: boolean;
-  currentNetwork?: WiFiNetwork;
+  currentNetwork: WiFiNetwork | null;
   capturedPackets: HandshakePacket[];
   hasCompleteHandshake: boolean;
+  parsedHandshake: ParsedHandshake | null;
+  interfaceStats: InterfaceStats | null;
+  channel: number;
+  captureStartedAt: number | null;
 }
 
 class WiFiSnifferService {
   private captureState: CaptureState = {
     isCapturing: false,
+    currentNetwork: null,
     capturedPackets: [],
     hasCompleteHandshake: false,
+    parsedHandshake: null,
+    interfaceStats: null,
+    channel: 1,
+    captureStartedAt: null,
   };
 
-  private emitter: NativeEventEmitter | null = null;
   private eventSubscriptions: Subscription[] = [];
+
   private handshakeListeners = new Set<
     (payload: HandshakeCompletePayload) => void
   >();
@@ -66,64 +79,156 @@ class WiFiSnifferService {
   private setupEventListeners(): void {
     this.cleanup();
 
-    this.emitter = WiFiSnifferEvents;
+    this.eventSubscriptions.push(
+      WiFiSnifferEvents.addListener(
+        'packetCaptured',
+        (packet: HandshakePacket) => {
+          this.handlePacketCaptured(packet);
+        }
+      )
+    );
 
     this.eventSubscriptions.push(
-      this.emitter.addListener(
-        'packetCaptured',
-        (packetData: HandshakePacket) => {
-          this.handlePacketCaptured(packetData);
+      WiFiSnifferEvents.addListener(
+        'handshakeComplete',
+        (handshake: ParsedHandshake) => {
+          this.handleHandshakeComplete(handshake);
         }
       )
     );
   }
 
   private handlePacketCaptured(packetData: HandshakePacket): void {
-    this.captureState.capturedPackets.push(packetData);
+    const packet = this.normalizePacket(packetData);
 
-    if (
-      packetData.type === 'EAPOL' &&
-      this.isCompleteHandshake(packetData) &&
-      !this.captureState.hasCompleteHandshake
-    ) {
-      this.captureState.hasCompleteHandshake = true;
-      this.notifyCompleteHandshake();
+    this.captureState = {
+      ...this.captureState,
+      capturedPackets: [...this.captureState.capturedPackets, packet],
+    };
+
+    DeviceEventEmitter.emit('packetCaptured', packet);
+
+    if (packet.type === 'EAPOL') {
+      this.evaluateHandshakeCompletion(packet);
     }
   }
 
-  private isCompleteHandshake(packet: HandshakePacket): boolean {
-    const eapolMessages = this.captureState.capturedPackets
-      .filter(
-        (p) =>
-          p.type === 'EAPOL' &&
-          p.bssid === packet.bssid &&
-          p.clientMac === packet.clientMac &&
-          p.message !== undefined
-      )
-      .map((p) => p.message as number);
-
-    const uniqueMessages = new Set(eapolMessages);
-    return (
-      uniqueMessages.size === 4 &&
-      [1, 2, 3, 4].every((msg) => uniqueMessages.has(msg))
-    );
-  }
-
-  private notifyCompleteHandshake(): void {
-    const [firstPacket] = this.captureState.capturedPackets;
-    const payload: HandshakeCompletePayload = {
-      bssid: firstPacket?.bssid,
-      clientMac: firstPacket?.clientMac,
-      packets: this.captureState.capturedPackets,
+  private handleHandshakeComplete(handshake: ParsedHandshake): void {
+    const enriched = this.enrichHandshake(handshake);
+    this.captureState = {
+      ...this.captureState,
+      hasCompleteHandshake: true,
+      parsedHandshake: enriched,
     };
 
+    this.emitHandshakeComplete(enriched);
+  }
+
+  private evaluateHandshakeCompletion(latestPacket: HandshakePacket): void {
+    const matchingPackets = this.captureState.capturedPackets.filter(
+      (packet): packet is HandshakePacket =>
+        packet.type === 'EAPOL' &&
+        packet.bssid === latestPacket.bssid &&
+        packet.clientMac === latestPacket.clientMac
+    );
+
+    const parsed = PacketParserService.analyzeHandshake(matchingPackets);
+    if (!parsed) {
+      return;
+    }
+
+    const enriched = this.enrichHandshake(parsed);
+    if (
+      this.captureState.hasCompleteHandshake &&
+      this.captureState.parsedHandshake?.clientMac === enriched.clientMac &&
+      this.captureState.parsedHandshake?.bssid === enriched.bssid
+    ) {
+      return;
+    }
+
+    this.captureState = {
+      ...this.captureState,
+      hasCompleteHandshake: true,
+      parsedHandshake: enriched,
+    };
+
+    this.emitHandshakeComplete(enriched);
+  }
+
+  private emitHandshakeComplete(handshake: ParsedHandshake): void {
+    const payload: HandshakeCompletePayload = { handshake };
     this.handshakeListeners.forEach((listener) => listener(payload));
-    this.emitter?.emit('handshakeComplete', payload);
+    DeviceEventEmitter.emit('handshakeComplete', handshake);
+  }
+
+  private enrichHandshake(handshake: ParsedHandshake): ParsedHandshake {
+    const ssid = this.captureState.currentNetwork?.ssid ?? handshake.ssid;
+    const channel =
+      this.captureState.currentNetwork?.channel ?? handshake.channel;
+    const signal =
+      this.captureState.currentNetwork?.signal ?? handshake.signal ?? -60;
+
+    return {
+      ...handshake,
+      ssid,
+      channel,
+      signal,
+    };
+  }
+
+  private normalizePacket(packetData: HandshakePacket): HandshakePacket {
+    const timestamp =
+      typeof packetData.timestamp === 'number'
+        ? packetData.timestamp
+        : Date.now() / 1000;
+
+    const signal =
+      typeof packetData.signal === 'number'
+        ? packetData.signal
+        : this.captureState.currentNetwork?.signal ?? -60;
+
+    const basePacket: HandshakePacket = {
+      ...packetData,
+      timestamp,
+      signal,
+      channel: packetData.channel ?? this.captureState.channel,
+      rawLength:
+        packetData.rawLength ??
+        (packetData.data ? Buffer.from(packetData.data, 'base64').length : 0),
+      clientMac:
+        packetData.clientMac ??
+        (packetData.source === packetData.bssid
+          ? packetData.destination
+          : packetData.source),
+    };
+
+    if (packetData.type === 'EAPOL' && packetData.data) {
+      const rawBuffer = Buffer.from(packetData.data, 'base64');
+      const parsed = PacketParserService.parseEAPOLPacket(rawBuffer);
+      if (parsed) {
+        return {
+          ...basePacket,
+          ...parsed,
+          data: packetData.data,
+          timestamp,
+          signal,
+          channel: basePacket.channel,
+          rawLength: rawBuffer.length,
+        };
+      }
+    }
+
+    return basePacket;
   }
 
   async scanNetworks(): Promise<WiFiNetwork[]> {
     try {
-      return await WiFiSnifferModule.scanNetworks();
+      const networks = await WiFiSnifferModule.scanNetworks();
+      return networks.map((network) => ({
+        ...network,
+        channel:
+          network.channel || parseChannelFromFrequency(network.frequency),
+      }));
     } catch (error) {
       console.error('Network scan failed:', error);
       return [];
@@ -138,17 +243,29 @@ class WiFiSnifferService {
       throw new Error('Capture already in progress');
     }
 
-    this.captureState.isCapturing = true;
-    this.captureState.currentNetwork = network;
+    const channel = network?.channel ?? this.captureState.channel ?? 1;
+
+    this.captureState = {
+      ...this.captureState,
+      isCapturing: true,
+      currentNetwork: network ?? null,
+      capturedPackets: [],
+      hasCompleteHandshake: false,
+      parsedHandshake: null,
+      channel,
+      captureStartedAt: Date.now(),
+    };
 
     try {
-      await WiFiSnifferModule.startCapture(interfaceName);
-      this.captureState.capturedPackets = [];
-      this.captureState.hasCompleteHandshake = false;
+      await WiFiSnifferModule.setChannel(channel).catch(() => false);
+      await WiFiSnifferModule.startCapture(interfaceName, channel);
     } catch (error) {
-      this.captureState.isCapturing = false;
-      this.captureState.currentNetwork = undefined;
-      console.error('Failed to start capture:', error);
+      this.captureState = {
+        ...this.captureState,
+        isCapturing: false,
+        currentNetwork: null,
+        captureStartedAt: null,
+      };
       throw error;
     }
   }
@@ -160,11 +277,13 @@ class WiFiSnifferService {
 
     try {
       await WiFiSnifferModule.stopCapture();
-      this.captureState.isCapturing = false;
-      this.captureState.currentNetwork = undefined;
-    } catch (error) {
-      console.error('Failed to stop capture:', error);
-      throw error;
+    } finally {
+      this.captureState = {
+        ...this.captureState,
+        isCapturing: false,
+        currentNetwork: null,
+        captureStartedAt: null,
+      };
     }
   }
 
@@ -181,6 +300,53 @@ class WiFiSnifferService {
     }
   }
 
+  async exportHandshake(options: ExportOptions = {}): Promise<string | null> {
+    const handshake =
+      this.captureState.parsedHandshake ??
+      PacketParserService.analyzeHandshake(
+        this.captureState.capturedPackets.filter(
+          (packet): packet is HandshakePacket => packet.type === 'EAPOL'
+        )
+      );
+
+    if (!handshake) {
+      return null;
+    }
+
+    const enriched = this.enrichHandshake(handshake);
+    return ExportService.exportHandshake(enriched, options);
+  }
+
+  async getInterfaceStats(): Promise<InterfaceStats | null> {
+    try {
+      const stats = await WiFiSnifferModule.getInterfaceStats();
+      this.captureState = {
+        ...this.captureState,
+        interfaceStats: stats,
+      };
+      return stats;
+    } catch (error) {
+      console.error('Failed to fetch interface stats:', error);
+      return null;
+    }
+  }
+
+  async setChannel(channel: number): Promise<boolean> {
+    try {
+      const success = await WiFiSnifferModule.setChannel(channel);
+      if (success) {
+        this.captureState = {
+          ...this.captureState,
+          channel,
+        };
+      }
+      return success;
+    } catch (error) {
+      console.error('Failed to set channel:', error);
+      return false;
+    }
+  }
+
   getCaptureState(): CaptureState {
     return {
       ...this.captureState,
@@ -188,42 +354,9 @@ class WiFiSnifferService {
     };
   }
 
-  async exportHandshake(): Promise<string | null> {
-    if (
-      !this.captureState.hasCompleteHandshake ||
-      this.captureState.capturedPackets.length === 0
-    ) {
-      return null;
-    }
-
-    const [firstPacket] = this.captureState.capturedPackets;
-    const handshakeData = {
-      bssid: firstPacket?.bssid,
-      clientMac: firstPacket?.clientMac,
-      packets: this.captureState.capturedPackets,
-      timestamp: new Date().toISOString(),
-    };
-
-    try {
-      const filePath = `${
-        RNFS.DocumentDirectoryPath
-      }/handshake_${Date.now()}.json`;
-      await RNFS.writeFile(
-        filePath,
-        JSON.stringify(handshakeData, null, 2),
-        'utf8'
-      );
-      return filePath;
-    } catch (error) {
-      console.error('Export failed:', error);
-      return null;
-    }
-  }
-
   cleanup(): void {
     this.eventSubscriptions.forEach((subscription) => subscription.remove());
     this.eventSubscriptions = [];
-    this.emitter = null;
   }
 
   onHandshakeComplete(
