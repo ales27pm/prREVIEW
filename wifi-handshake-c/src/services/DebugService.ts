@@ -46,14 +46,12 @@ export class DebugService {
   }
 
   static async getSystemInfo(): Promise<Record<string, unknown>> {
-    const constants = Platform.constants as
-      | Record<string, unknown>
-      | undefined;
+    const constants = Platform.constants as Record<string, unknown> | undefined;
     const constantModel =
-      typeof constants?.["Model"] === 'string'
-        ? (constants?.["Model"] as string)
-        : typeof constants?.["model"] === 'string'
-        ? (constants?.["model"] as string)
+      typeof constants?.Model === 'string'
+        ? (constants?.Model as string)
+        : typeof constants?.model === 'string'
+        ? (constants?.model as string)
         : undefined;
     const modelValue = constantModel ?? 'Unknown';
 

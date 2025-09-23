@@ -2,15 +2,10 @@ import { Buffer } from 'buffer';
 import type { HandshakePacket, ParsedHandshake } from '@/types/WiFiSniffer';
 
 const MIN_EAPOL_FRAME_LENGTH = 99;
-const REQUIRED_HANDSHAKE_MESSAGES: ReadonlyArray<1 | 2 | 3 | 4> = [
-  1,
-  2,
-  3,
-  4,
-];
+const REQUIRED_HANDSHAKE_MESSAGES: ReadonlyArray<1 | 2 | 3 | 4> = [1, 2, 3, 4];
 
 export class PacketParserService {
-  private static readonly EAPOL_VERSION = 0x02;
+  private static readonly SUPPORTED_EAPOL_VERSIONS = new Set([0x01, 0x02]);
   private static readonly KEY_INFO_MASK = 0x000f;
   private static readonly KEY_MIC_MASK = 0x0100;
   private static readonly KEY_ENCRYPTED_MASK = 0x0400;
@@ -41,7 +36,7 @@ export class PacketParserService {
       const eapolType = eapolHeader[1];
       const length = eapolHeader.readUInt16BE(2);
 
-      if (version !== this.EAPOL_VERSION || eapolType !== 0x03) {
+      if (!this.SUPPORTED_EAPOL_VERSIONS.has(version) || eapolType !== 0x03) {
         return null;
       }
 
