@@ -63,9 +63,10 @@ final class RVICaptureImporter {
           pcap_close(handle)
         }
 
-        var headerPointer = UnsafeMutablePointer<pcap_pkthdr>.allocate(capacity: 1)
-        defer { headerPointer.deallocate() }
+        let linkType = pcap_datalink(handle)
+        let shouldUseIPParser = Self.shouldParseAsIP(linkType: linkType)
 
+        var headerPointer: UnsafeMutablePointer<pcap_pkthdr>?
         var dataPointer: UnsafePointer<UInt8>?
         var processed = 0
         var dropped = 0
@@ -73,8 +74,9 @@ final class RVICaptureImporter {
         while true {
           let status = pcap_next_ex(handle, &headerPointer, &dataPointer)
           if status == 1 {
-            guard let dataPointer else { continue }
-            let captureLength = Int(headerPointer.pointee.caplen)
+            guard let headerPointer, let dataPointer else { continue }
+            let header = headerPointer.pointee
+            let captureLength = Int(header.caplen)
             let payload = Data(bytes: dataPointer, count: captureLength)
 
             if let filter, payload.range(of: filter) == nil {
@@ -82,11 +84,16 @@ final class RVICaptureImporter {
               continue
             }
 
-            let seconds = Double(headerPointer.pointee.ts.tv_sec)
-            let microseconds = Double(headerPointer.pointee.ts.tv_usec)
+            let seconds = Double(header.ts.tv_sec)
+            let microseconds = Double(header.ts.tv_usec)
             let timestamp = seconds * 1000.0 + microseconds / 1000.0
 
-            let parsed = PacketParser.parse(payload)
+            let parsed: [String: Any]
+            if shouldUseIPParser {
+              parsed = PacketParser.parseIPPacket(payload)
+            } else {
+              parsed = PacketParser.parse(payload)
+            }
             let headers = (parsed["headers"] as? [String: Any]) ?? [:]
             let preview = (parsed["preview"] as? String) ?? Self.hexPreview(for: payload)
 
@@ -267,4 +274,20 @@ final class RVICaptureImporter {
     let maxBytes = min(data.count, 64)
     return data.prefix(maxBytes).map { String(format: "%02x", $0) }.joined(separator: " ")
   }
+
+#if canImport(pcap)
+  private static func shouldParseAsIP(linkType: Int32) -> Bool {
+    guard let namePointer = pcap_datalink_val_to_name(linkType) else {
+      return false
+    }
+
+    let name = String(cString: namePointer).uppercased()
+    switch name {
+    case "RAW", "IP", "IPV4", "IPV6":
+      return true
+    default:
+      return false
+    }
+  }
+#endif
 }
