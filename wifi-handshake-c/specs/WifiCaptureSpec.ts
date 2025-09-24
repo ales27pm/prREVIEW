@@ -1,4 +1,4 @@
-import type { TurboModule } from 'react-native';
+import type { EmitterSubscription, TurboModule } from 'react-native';
 import {
   NativeEventEmitter,
   NativeModules,
@@ -21,6 +21,25 @@ const LINKING_ERROR =
 const nativeModule = TurboModuleRegistry.get<Spec>('WifiCapture');
 
 const fallbackEmitter = new NativeEventEmitter();
+const fallbackSubscriptions: EmitterSubscription[] = [];
+
+const trackFallbackSubscription = (subscription: EmitterSubscription) => {
+  fallbackSubscriptions.push(subscription);
+};
+
+const removeFallbackListeners = (count: number) => {
+  if (count <= 0) {
+    return;
+  }
+
+  for (let index = 0; index < count; index += 1) {
+    const subscription = fallbackSubscriptions.pop();
+    if (!subscription) {
+      break;
+    }
+    subscription.remove();
+  }
+};
 
 const createFallbackModule = (): Spec => ({
   async scan() {
@@ -65,19 +84,29 @@ const createFallbackModule = (): Spec => ({
     return { bytesCaptured: 0, packetsProcessed: 0, dropped: 0 };
   },
   addListener(eventName: string) {
-    fallbackEmitter.addListener(eventName, () => undefined);
+    const subscription = fallbackEmitter.addListener(
+      eventName,
+      () => undefined
+    );
+    trackFallbackSubscription(subscription);
   },
-  removeListeners(_count: number) {
-    fallbackEmitter.removeAllListeners('onDeepPacket');
+  removeListeners(count: number) {
+    removeFallbackListeners(count);
   },
 });
 
 const WifiCapture: Spec = nativeModule ?? createFallbackModule();
 
+const nativeBridgeModule =
+  typeof NativeModules !== 'undefined' && NativeModules != null
+    ? ((NativeModules as Record<string, unknown>).WifiCapture as
+        | object
+        | undefined)
+    : undefined;
+
 export const WifiCaptureEvents = nativeModule
   ? new NativeEventEmitter(
-      (NativeModules.WifiCapture as unknown as object | undefined) ??
-        (nativeModule as unknown as object)
+      nativeBridgeModule ?? (nativeModule as unknown as object)
     )
   : fallbackEmitter;
 

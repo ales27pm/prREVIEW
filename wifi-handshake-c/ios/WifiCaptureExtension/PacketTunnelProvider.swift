@@ -14,6 +14,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
       let provider = protocolConfiguration as? NETunnelProviderProtocol,
       let configuration = provider.providerConfiguration,
       let portValue = configuration["udpPort"] as? Int,
+      portValue > 0,
+      portValue <= Int(UInt16.max),
       let port = NWEndpoint.Port(rawValue: UInt16(portValue))
     else {
       logger.error("Invalid UDP port in configuration")
