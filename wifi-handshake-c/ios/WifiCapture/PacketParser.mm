@@ -382,6 +382,9 @@ static NSDictionary<NSString *, id> *ParseIPv6Packet(const uint8_t *bytes, size_
   bool hasSignal = false;
   bool hasNoise = false;
   uint64_t presentMask = 0;
+  bool gotChannel = false;
+  bool gotSignal = false;
+  bool gotNoise = false;
 
   for (size_t wordIndex = 0; wordIndex < presentWords.size(); wordIndex++) {
     const uint32_t wordValue = presentWords[wordIndex];
@@ -416,16 +419,19 @@ static NSDictionary<NSString *, id> *ParseIPv6Packet(const uint8_t *bytes, size_
           channelFlags = CFSwapInt16LittleToHost(
             *reinterpret_cast<const uint16_t *>(fieldPointer + 2)
           );
+          gotChannel = true;
           break;
         }
         case 5: {
           signalStrength = static_cast<int8_t>(fieldPointer[0]);
           hasSignal = true;
+          gotSignal = true;
           break;
         }
         case 6: {
           noiseLevel = static_cast<int8_t>(fieldPointer[0]);
           hasNoise = true;
+          gotNoise = true;
           break;
         }
         default:
@@ -433,6 +439,12 @@ static NSDictionary<NSString *, id> *ParseIPv6Packet(const uint8_t *bytes, size_
       }
 
       fieldOffset += layout.length;
+      if (gotChannel && gotSignal && gotNoise) {
+        break;
+      }
+    }
+    if (gotChannel && gotSignal && gotNoise) {
+      break;
     }
   }
 

@@ -109,7 +109,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
       for (index, packet) in packets.enumerated() {
         let protocolNumber: NSNumber?
-        if let protocols, index < protocols.count {
+        if index < protocols.count {
           protocolNumber = protocols[index]
         } else {
           protocolNumber = nil

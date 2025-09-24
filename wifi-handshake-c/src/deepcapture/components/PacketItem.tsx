@@ -124,13 +124,11 @@ const PacketItem: React.FC<PacketItemProps> = React.memo(({ packet }) => {
       lines.push(`Protocol: ${protocol}`);
     }
     if (sourceLabel) {
-      lines.push(`Source: ${sourceLabel}`);
+      const hasSrcIp = typeof packet.headers.srcIP === 'string';
+      lines.push(`${hasSrcIp ? 'Source' : 'Source MAC'}: ${sourceLabel}`);
     }
     if (destinationLabel) {
       lines.push(`Destination: ${destinationLabel}`);
-    }
-    if (!protocol && !destinationLabel && sourceLabel) {
-      lines.push(`Source MAC: ${sourceLabel}`);
     }
     if (channel) {
       lines.push(channel);
@@ -154,6 +152,7 @@ const PacketItem: React.FC<PacketItemProps> = React.memo(({ packet }) => {
     packetSize,
     protocol,
     signal,
+    packet.headers.srcIP,
     sourceLabel,
   ]);
 
