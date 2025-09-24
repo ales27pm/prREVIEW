@@ -284,6 +284,23 @@ final class WifiCaptureImpl: NSObject {
         guard !finished else { return }
         finished = true
         clearObserver()
+
+        if let disconnectError = connection.lastDisconnectError as NSError? {
+          if let stopReason = self.extractStopReason(from: disconnectError) {
+            self.logger.error(
+              "Tunnel disconnected (\(reason, privacy: .public)) stopReason=\(self.describeStopReason(stopReason), privacy: .public)"
+            )
+          } else {
+            self.logger.error(
+              "Tunnel disconnected (\(reason, privacy: .public)) error=\(disconnectError.localizedDescription, privacy: .public) userInfo=\(String(describing: disconnectError.userInfo), privacy: .public)"
+            )
+          }
+        } else {
+          self.logger.error(
+            "Tunnel disconnected (\(reason, privacy: .public)) with no error information"
+          )
+        }
+
         self.cleanupTunnel(manager: manager)
         self.resetState()
 
@@ -1058,6 +1075,72 @@ extension WifiCaptureImpl {
 
     DispatchQueue.main.async {
       reject(code, message, error)
+    }
+  }
+
+  private func extractStopReason(from error: NSError) -> NEProviderStopReason? {
+    let candidateKeys = [
+      "NEVPNErrorStopReason",
+      "NEVPNConnectionStopReason",
+      "NEVPNErrorCode",
+      "NEVPNDisconnectReason",
+      "NEVPNStopReason",
+    ]
+
+    for key in candidateKeys {
+      if let number = error.userInfo[key] as? NSNumber {
+        return NEProviderStopReason(rawValue: number.intValue)
+      }
+      if let value = error.userInfo[key] as? Int {
+        return NEProviderStopReason(rawValue: value)
+      }
+    }
+
+    return nil
+  }
+
+  private func describeStopReason(_ reason: NEProviderStopReason) -> String {
+    switch reason {
+    case .none:
+      return "none"
+    case .userInitiated:
+      return "userInitiated"
+    case .providerFailed:
+      return "providerFailed"
+    case .noNetworkAvailable:
+      return "noNetworkAvailable"
+    case .unrecoverableNetworkChange:
+      return "unrecoverableNetworkChange"
+    case .providerDisabled:
+      return "providerDisabled"
+    case .authenticationCanceled:
+      return "authenticationCanceled"
+    case .configurationFailed:
+      return "configurationFailed"
+    case .idleTimeout:
+      return "idleTimeout"
+    case .configurationDisabled:
+      return "configurationDisabled"
+    case .configurationRemoved:
+      return "configurationRemoved"
+    case .superceded:
+      return "superceded"
+    case .userLogout:
+      return "userLogout"
+    case .userSwitch:
+      return "userSwitch"
+    case .connectionFailed:
+      return "connectionFailed"
+    case .sleep:
+      return "sleep"
+    case .appUpdate:
+      return "appUpdate"
+    case .permissionRevoked:
+      return "permissionRevoked"
+    case .airplaneMode:
+      return "airplaneMode"
+    @unknown default:
+      return "unknown_\(reason.rawValue)"
     }
   }
 }

@@ -340,7 +340,10 @@ export const parsePacket = (
     const payload = new Uint8Array(decode(packet.payload));
     const headerType = String(packet.headers?.type ?? '').toUpperCase();
 
-    let isHandshake = headerType.includes('EAPOL');
+    let isHandshake = Boolean(packet.headers?.isEapol);
+    if (!isHandshake) {
+      isHandshake = headerType.includes('EAPOL');
+    }
 
     if (!isHandshake && payload.length >= 14) {
       isHandshake = payload[12] === 0x88 && payload[13] === 0x8e;
