@@ -5,6 +5,9 @@ import Network
 import NetworkExtension
 import os.log
 import React
+#if canImport(UIKit)
+  import UIKit
+#endif
 
 @objcMembers
 final class WifiCaptureImpl: NSObject {
@@ -28,6 +31,12 @@ final class WifiCaptureImpl: NSObject {
   private var filterString: String?
   private var filterData: Data?
   private var handshakeInterface: String?
+  private var advancedScanEnabled = false
+  private var scanCache: [String: CachedNetwork] = [:]
+  private let scanCacheExpiration: TimeInterval = 300
+  private var tetheredCaptureStart: Date?
+  private var tetheredDeviceIdentifier: String?
+  private let rviImporter = RVICaptureImporter()
   private lazy var cachedExtensionBundleIdentifier: String? = Self.locateExtensionBundleIdentifier()
 
   private override init() {
@@ -43,34 +52,55 @@ final class WifiCaptureImpl: NSObject {
   // MARK: - Legacy API
 
   func scan(withResolve resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-    guard let interface = CWWiFiClient.shared().interface() else {
-      reject("NO_INTERFACE", "Unable to access Wi-Fi interface", nil)
-      return
-    }
+    queue.async { [weak self] in
+      guard let self else { return }
 
-    do {
-      let networks = try interface.scanForNetworks(withName: nil)
-      let payload = networks.map { network -> [String: Any] in
-        var details: [String: Any] = [
-          "ssid": network.ssid ?? "",
-          "bssid": network.bssid ?? "",
-          "signal": network.rssiValue,
-          "channel": network.wlanChannel.channelNumber,
-          "frequency": network.wlanChannel.frequency,
-        ]
-
-        #if compiler(>=5.7)
-          details["security"] = network.security.description
-        #else
-          details["security"] = "Unknown"
-        #endif
-
-        return details
+      guard let interface = CWWiFiClient.shared().interface() else {
+        self.logger.error("Scan failed: interface unavailable")
+        let cached = self.buildScanPayload(includeCacheOnly: true)
+        DispatchQueue.main.async {
+          if self.advancedScanEnabled, !cached.isEmpty {
+            resolve(cached)
+          } else {
+            reject("NO_INTERFACE", "Unable to access Wi-Fi interface", nil)
+          }
+        }
+        return
       }
-      resolve(payload)
-    } catch {
-      logger.error("Scan failed: \(error.localizedDescription, privacy: .public)")
-      reject("SCAN_ERROR", error.localizedDescription, error)
+
+      guard interface.powerOn() else {
+        self.logger.error("Scan failed: Wi-Fi interface is powered off")
+        let cached = self.buildScanPayload(includeCacheOnly: true)
+        DispatchQueue.main.async {
+          if self.advancedScanEnabled, !cached.isEmpty {
+            resolve(cached)
+          } else {
+            reject("INTERFACE_POWERED_OFF", "Wi-Fi interface is powered off", nil)
+          }
+        }
+        return
+      }
+
+      do {
+        let networks = try interface.scanForNetworks(withName: nil)
+        let latest = self.cacheNetworks(from: networks)
+        let payload = self.buildScanPayload(includeCacheOnly: false, latest: latest)
+        DispatchQueue.main.async {
+          resolve(payload)
+        }
+      } catch {
+        self.logger.error(
+          "Scan failed: \(error.localizedDescription, privacy: .public)"
+        )
+        let cached = self.buildScanPayload(includeCacheOnly: true)
+        DispatchQueue.main.async {
+          if self.advancedScanEnabled, !cached.isEmpty {
+            resolve(cached)
+          } else {
+            reject("SCAN_ERROR", error.localizedDescription, error)
+          }
+        }
+      }
     }
   }
 
@@ -91,7 +121,11 @@ final class WifiCaptureImpl: NSObject {
       return
     }
 
-    handshakeInterface = nil
+    performOnQueue(wait: true) {
+      self.handshakeInterface = nil
+      self.scanCache.removeAll()
+      self.tetheredCaptureStart = nil
+    }
     resolve(true)
   }
 
@@ -357,6 +391,171 @@ final class WifiCaptureImpl: NSObject {
     }
   }
 
+  func setAdvancedScanMode(
+    withEnabled enabled: Bool,
+    resolve: @escaping RCTPromiseResolveBlock,
+    reject: @escaping RCTPromiseRejectBlock
+  ) {
+    performOnQueue(wait: true) {
+      self.advancedScanEnabled = enabled
+      if !enabled {
+        self.scanCache.removeAll()
+      }
+    }
+
+    DispatchQueue.main.async {
+      resolve(nil)
+    }
+  }
+
+  func cachedScanResults(
+    withResolve resolve: @escaping RCTPromiseResolveBlock,
+    reject: @escaping RCTPromiseRejectBlock
+  ) {
+    queue.async {
+      let payload = self.buildScanPayload(includeCacheOnly: true)
+      DispatchQueue.main.async {
+        resolve(payload)
+      }
+    }
+  }
+
+  func importTetheredCapture(
+    withFilePath filePath: String,
+    options: [String: Any]?,
+    resolve: @escaping RCTPromiseResolveBlock,
+    reject: @escaping RCTPromiseRejectBlock
+  ) {
+    queue.async { [weak self] in
+      guard let self else { return }
+
+      let fileURL = URL(fileURLWithPath: filePath)
+      let overrideFilter = (options?["filter"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let effectiveFilter = overrideFilter?.isEmpty == false
+        ? overrideFilter?.data(using: .utf8)
+        : self.filterData
+
+      guard FileManager.default.fileExists(atPath: fileURL.path) else {
+        DispatchQueue.main.async {
+          reject("FILE_NOT_FOUND", "No file located at path", nil)
+        }
+        return
+      }
+
+      let startTime = Date()
+      let startedAccess = fileURL.startAccessingSecurityScopedResource()
+
+      self.rviImporter.importFile(
+        at: fileURL,
+        filter: effectiveFilter
+      ) { [weak self] packet in
+        self?.publishPacket(
+          id: packet.id,
+          timestamp: packet.timestamp,
+          payloadData: packet.payload,
+          headers: packet.headers,
+          preview: packet.preview,
+          filterOverride: effectiveFilter
+        )
+      } completion: { result in
+        if startedAccess {
+          fileURL.stopAccessingSecurityScopedResource()
+        }
+
+        switch result {
+        case .success(let summary):
+          let duration = Date().timeIntervalSince(startTime)
+          DispatchQueue.main.async {
+            resolve([
+              "packets": summary.packets,
+              "duration": duration,
+              "dropped": summary.dropped,
+            ])
+          }
+        case .failure(let error):
+          self.logger.error(
+            "RVI import failed: \(error.localizedDescription, privacy: .public)"
+          )
+          DispatchQueue.main.async {
+            reject("RVI_IMPORT_FAILED", error.localizedDescription, error)
+          }
+        }
+      }
+    }
+  }
+
+  func startTetheredCapture(
+    withDeviceIdentifier deviceIdentifier: String,
+    resolve: @escaping RCTPromiseResolveBlock,
+    reject: @escaping RCTPromiseRejectBlock
+  ) {
+    let resolvedIdentifier = Self.resolveDeviceIdentifier(from: deviceIdentifier)
+
+    guard let identifier = resolvedIdentifier else {
+      logger.error("rvictl start failed: missing device identifier")
+      DispatchQueue.main.async {
+        reject("RVI_IDENTIFIER", "A tethered device identifier is required", nil)
+      }
+      return
+    }
+
+    performOnQueue(wait: true) {
+      self.tetheredCaptureStart = Date()
+      self.tetheredDeviceIdentifier = identifier
+    }
+
+    rviImporter.start(deviceIdentifier: identifier) { [weak self] result in
+      switch result {
+      case .success(let interfaceName):
+        self?.logger.log("rvictl attached to \(interfaceName, privacy: .public)")
+        DispatchQueue.main.async {
+          resolve(["interface": interfaceName])
+        }
+      case .failure(let error):
+        self?.logger.error(
+          "rvictl start failed: \(error.localizedDescription, privacy: .public)"
+        )
+        DispatchQueue.main.async {
+          reject("RVI_START_FAILED", error.localizedDescription, error)
+        }
+      }
+    }
+  }
+
+  func stopTetheredCapture(
+    withDeviceIdentifier deviceIdentifier: String?,
+    resolve: @escaping RCTPromiseResolveBlock,
+    reject: @escaping RCTPromiseRejectBlock
+  ) {
+    let resolvedIdentifier: String?
+    if let deviceIdentifier, !deviceIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      resolvedIdentifier = deviceIdentifier
+    } else {
+      resolvedIdentifier = tetheredDeviceIdentifier
+    }
+
+    rviImporter.stop(deviceIdentifier: resolvedIdentifier) { [weak self] result in
+      switch result {
+      case .success:
+        self?.logger.log("rvictl detached")
+        self?.performOnQueue(wait: true) {
+          self?.tetheredDeviceIdentifier = nil
+          self?.tetheredCaptureStart = nil
+        }
+        DispatchQueue.main.async {
+          resolve(nil)
+        }
+      case .failure(let error):
+        self?.logger.error(
+          "rvictl stop failed: \(error.localizedDescription, privacy: .public)"
+        )
+        DispatchQueue.main.async {
+          reject("RVI_STOP_FAILED", error.localizedDescription, error)
+        }
+      }
+    }
+  }
+
   // MARK: - Tunnel helpers
 
   private func loadTunnelManager(completion: @escaping (Result<NETunnelProviderManager, Error>) -> Void) {
@@ -406,6 +605,8 @@ final class WifiCaptureImpl: NSObject {
       self.filterString = nil
       self.filterData = nil
       self.stats = CaptureStats()
+      self.tetheredCaptureStart = nil
+      self.tetheredDeviceIdentifier = nil
     }
   }
 
@@ -492,7 +693,7 @@ final class WifiCaptureImpl: NSObject {
 
   private func processIncoming(data: Data) {
     guard !data.isEmpty else {
-      queue.async {
+      performOnQueue(wait: false) {
         self.stats.dropped += 1
       }
       return
@@ -500,72 +701,328 @@ final class WifiCaptureImpl: NSObject {
 
     do {
       if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-         let payload = json["payload"] as? String,
-         let payloadData = Data(base64Encoded: payload) {
+         let payloadString = json["payload"] as? String,
+         let payloadData = Data(base64Encoded: payloadString) {
         let packetId = (json["id"] as? String) ?? UUID().uuidString
         let timestamp = (json["timestamp"] as? Double) ?? (Date().timeIntervalSince1970 * 1000)
         let headers = json["headers"] as? [String: Any] ?? [:]
-        let preview = json["preview"] as? String ?? ""
+        let preview = json["preview"] as? String ?? createHexPreview(from: payloadData)
 
-        if let filter = filterData, payloadData.range(of: filter) == nil {
-          queue.async {
-            self.stats.dropped += 1
-          }
-          return
-        }
-
-        queue.async {
-          self.stats.bytesCaptured += UInt64(payloadData.count)
-          self.stats.packetsProcessed += 1
-        }
-
-        let body: [String: Any] = [
-          "id": packetId,
-          "timestamp": timestamp,
-          "payload": payload,
-          "headers": headers,
-          "preview": preview,
-        ]
-
-        DispatchQueue.main.async { [weak self] in
-          self?.eventEmitter?.sendEvent(withName: "onDeepPacket", body: body)
-        }
+        publishPacket(
+          id: packetId,
+          timestamp: timestamp,
+          payloadData: payloadData,
+          headers: headers,
+          preview: preview
+        )
         return
-      }
-
-      // Fallback: treat payload as raw frame data
-      let payload = data.base64EncodedString()
-      if let filter = filterData, data.range(of: filter) == nil {
-        queue.async {
-          self.stats.dropped += 1
-        }
-        return
-      }
-
-      queue.async {
-        self.stats.bytesCaptured += UInt64(data.count)
-        self.stats.packetsProcessed += 1
       }
 
       let preview = createHexPreview(from: data)
-      let headers: [String: Any] = ["type": "Raw"]
-      let body: [String: Any] = [
-        "id": UUID().uuidString,
-        "timestamp": Date().timeIntervalSince1970 * 1000,
-        "payload": payload,
-        "headers": headers,
-        "preview": preview,
-      ]
-
-      DispatchQueue.main.async { [weak self] in
-        self?.eventEmitter?.sendEvent(withName: "onDeepPacket", body: body)
-      }
+      publishPacket(
+        id: UUID().uuidString,
+        timestamp: Date().timeIntervalSince1970 * 1000,
+        payloadData: data,
+        headers: ["type": "Raw"],
+        preview: preview
+      )
     } catch {
       logger.error("Failed to decode UDP payload: \(error.localizedDescription, privacy: .public)")
-      queue.async {
+      performOnQueue(wait: false) {
         self.stats.dropped += 1
       }
     }
+  }
+
+  private func cacheNetworks(from networks: Set<CWNetwork>) -> [CachedNetwork] {
+    var updatedCache = scanCache
+    let now = Date()
+    var latest: [CachedNetwork] = []
+
+    for network in networks {
+      guard let bssid = network.bssid else { continue }
+
+      let frequency = network.wlanChannel.frequency
+      let securityList = securityDescriptions(for: network)
+      let cached = CachedNetwork(
+        ssid: network.ssid ?? "",
+        bssid: bssid,
+        signal: network.rssiValue,
+        channel: network.wlanChannel.channelNumber,
+        frequency: frequency,
+        security: securityList.isEmpty ? ["Unknown"] : securityList,
+        capabilities: securityList.joined(separator: ", "),
+        noise: extractNoise(from: network),
+        lastSeen: now,
+        channelWidth: channelWidthValue(for: network.wlanChannel),
+        phyMode: phyModeString(for: network),
+        band: bandDescription(for: frequency)
+      )
+
+      updatedCache[bssid] = cached
+      latest.append(cached)
+    }
+
+    if advancedScanEnabled {
+      let threshold = now.addingTimeInterval(-scanCacheExpiration)
+      updatedCache = updatedCache.filter { $0.value.lastSeen >= threshold }
+    } else {
+      updatedCache = Dictionary(uniqueKeysWithValues: latest.map { ($0.bssid, $0) })
+    }
+
+    scanCache = updatedCache
+
+    if advancedScanEnabled {
+      return Array(updatedCache.values)
+    }
+
+    return latest
+  }
+
+  private func buildScanPayload(
+    includeCacheOnly: Bool,
+    latest: [CachedNetwork]? = nil
+  ) -> [[String: Any]] {
+    let now = Date()
+    let sourceNetworks: [CachedNetwork]
+
+    if includeCacheOnly {
+      sourceNetworks = Array(scanCache.values)
+    } else if advancedScanEnabled {
+      sourceNetworks = Array(scanCache.values)
+    } else {
+      sourceNetworks = latest ?? []
+    }
+
+    let sorted = sourceNetworks.sorted { lhs, rhs in
+      if lhs.signal == rhs.signal {
+        return lhs.lastSeen > rhs.lastSeen
+      }
+      return lhs.signal > rhs.signal
+    }
+
+    return sorted.map { network in
+      var dictionary = networkDictionary(for: network)
+      dictionary["lastSeen"] = network.lastSeen.timeIntervalSince1970 * 1000
+      dictionary["isCached"] = now.timeIntervalSince(network.lastSeen) > 1
+      return dictionary
+    }
+  }
+
+  private func networkDictionary(for network: CachedNetwork) -> [String: Any] {
+    var payload: [String: Any] = [
+      "ssid": network.ssid,
+      "bssid": network.bssid,
+      "signal": network.signal,
+      "channel": network.channel,
+      "frequency": network.frequency,
+      "capabilities": network.capabilities,
+      "band": network.band,
+    ]
+
+    if network.security.count == 1, let value = network.security.first {
+      payload["security"] = value
+    } else {
+      payload["security"] = network.security
+    }
+
+    if let noise = network.noise {
+      payload["noise"] = noise
+    }
+
+    if let width = network.channelWidth {
+      payload["channelWidth"] = width
+    }
+
+    if let phy = network.phyMode {
+      payload["phyMode"] = phy
+    }
+
+    return payload
+  }
+
+  private func securityDescriptions(for network: CWNetwork) -> [String] {
+    var values: [String] = []
+
+    if let supported = network.value(forKey: "supportedSecurity") as? [NSNumber] {
+      values.append(contentsOf: supported.map { securityString(for: $0.intValue) })
+    } else if let supportedSet = network.value(forKey: "supportedSecurity") as? NSSet,
+              let items = supportedSet.allObjects as? [NSNumber] {
+      values.append(contentsOf: items.map { securityString(for: $0.intValue) })
+    }
+
+    if values.isEmpty,
+       let securityValue = network.value(forKey: "security") as? NSNumber {
+      values.append(securityString(for: securityValue.intValue))
+    }
+
+    return Array(Set(values)).sorted()
+  }
+
+  private func securityString(for rawValue: Int) -> String {
+    switch rawValue {
+    case 0:
+      return "Open"
+    case 1:
+      return "WEP"
+    case 2:
+      return "WPA"
+    case 3:
+      return "WPA Mixed"
+    case 4:
+      return "WPA2"
+    case 5:
+      return "Personal"
+    case 6:
+      return "Dynamic WEP"
+    case 7:
+      return "WPA Enterprise"
+    case 8:
+      return "WPA Enterprise Mixed"
+    case 9:
+      return "WPA2 Enterprise"
+    case 10:
+      return "Enterprise"
+    case 11:
+      return "WPA3"
+    case 12:
+      return "WPA3 Enterprise"
+    case 13:
+      return "WPA3 Transition"
+    default:
+      return "Unknown"
+    }
+  }
+
+  private func channelWidthValue(for channel: CWChannel) -> Int? {
+    if let widthNumber = channel.value(forKey: "channelWidth") as? NSNumber {
+      switch widthNumber.intValue {
+      case 0:
+        return 20
+      case 1:
+        return 40
+      case 2:
+        return 80
+      case 3:
+        return 160
+      case 4:
+        return 80
+      default:
+        return nil
+      }
+    }
+    return nil
+  }
+
+  private func phyModeString(for network: CWNetwork) -> String? {
+    guard let phyValue = network.value(forKey: "phyMode") as? NSNumber else {
+      return nil
+    }
+
+    switch phyValue.intValue {
+    case 0:
+      return "802.11a"
+    case 1:
+      return "802.11b"
+    case 2:
+      return "802.11g"
+    case 3:
+      return "802.11n"
+    case 4:
+      return "802.11ac"
+    case 5:
+      return "802.11ax"
+    default:
+      return nil
+    }
+  }
+
+  private func bandDescription(for frequency: Int) -> String {
+    switch frequency {
+    case 2400 ... 2500:
+      return "2.4GHz"
+    case 4900 ... 5899:
+      return "5GHz"
+    case 5925 ... 7125:
+      return "6GHz"
+    default:
+      return "Unknown"
+    }
+  }
+
+  private func extractNoise(from network: CWNetwork) -> Int? {
+    if let noiseValue = network.value(forKey: "noiseMeasurement") as? NSNumber {
+      return noiseValue.intValue
+    }
+    return nil
+  }
+
+  private func publishPacket(
+    id: String,
+    timestamp: Double,
+    payloadData: Data,
+    headers: [String: Any],
+    preview: String,
+    filterOverride: Data? = nil
+  ) {
+    if shouldDrop(data: payloadData, filterOverride: filterOverride) {
+      performOnQueue(wait: false) {
+        self.stats.dropped += 1
+      }
+      return
+    }
+
+    performOnQueue(wait: false) {
+      self.stats.bytesCaptured += UInt64(payloadData.count)
+      self.stats.packetsProcessed += 1
+    }
+
+    let message: [String: Any] = [
+      "id": id,
+      "timestamp": timestamp,
+      "payload": payloadData.base64EncodedString(),
+      "headers": headers,
+      "preview": preview.isEmpty ? createHexPreview(from: payloadData) : preview,
+    ]
+
+    DispatchQueue.main.async { [weak self] in
+      self?.eventEmitter?.sendEvent(withName: "onDeepPacket", body: message)
+    }
+  }
+
+  private func shouldDrop(data: Data, filterOverride: Data?) -> Bool {
+    guard let filter = filterOverride ?? filterData else {
+      return false
+    }
+    return data.range(of: filter) == nil
+  }
+
+  private static func resolveDeviceIdentifier(from rawIdentifier: String) -> String? {
+    let trimmed = rawIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !trimmed.isEmpty, trimmed.lowercased() != "auto" {
+      return trimmed
+    }
+
+    #if targetEnvironment(simulator)
+      if let simulatorId = ProcessInfo.processInfo.environment["SIMULATOR_UDID"],
+         !simulatorId.isEmpty {
+        return simulatorId
+      }
+    #endif
+
+    if let environmentIdentifier = ProcessInfo.processInfo.environment["WIFICAPTURE_DEVICE_ID"],
+       !environmentIdentifier.isEmpty {
+      return environmentIdentifier
+    }
+
+    #if canImport(UIKit)
+      if let vendorId = UIDevice.current.identifierForVendor?.uuidString,
+         !vendorId.isEmpty {
+        return vendorId
+      }
+    #endif
+
+    return trimmed.isEmpty ? nil : trimmed
   }
 }
 
@@ -614,6 +1071,21 @@ private func createHexPreview(from data: Data) -> String {
     return "\(hex) …"
   }
   return hex
+}
+
+private struct CachedNetwork {
+  let ssid: String
+  let bssid: String
+  let signal: Int
+  let channel: Int
+  let frequency: Int
+  let security: [String]
+  let capabilities: String
+  let noise: Int?
+  let lastSeen: Date
+  let channelWidth: Int?
+  let phyMode: String?
+  let band: String
 }
 
 private struct CaptureStats {

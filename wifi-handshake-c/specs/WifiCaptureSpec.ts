@@ -9,6 +9,8 @@ import type {
   DeepCaptureOptions,
   PacketData,
   WiFiCaptureNativeModule,
+  WiFiNetwork,
+  TetheredCaptureResult,
 } from '../src/types/WiFiSniffer';
 
 export type DeepPacketEvent = PacketData;
@@ -83,6 +85,37 @@ const createFallbackModule = (): Spec => ({
     }
     return { bytesCaptured: 0, packetsProcessed: 0, dropped: 0 };
   },
+  async setAdvancedScanMode(enabled: boolean) {
+    if (Platform.OS === 'ios') {
+      console.warn(`[WifiCapture] ${LINKING_ERROR}`);
+    }
+    if (!enabled) {
+      return;
+    }
+  },
+  async getCachedScanResults() {
+    if (Platform.OS === 'ios') {
+      console.warn(`[WifiCapture] ${LINKING_ERROR}`);
+    }
+    return [] as WiFiNetwork[];
+  },
+  async importTetheredCapture(_path: string, _options?: DeepCaptureOptions) {
+    if (Platform.OS === 'ios') {
+      console.warn(`[WifiCapture] ${LINKING_ERROR}`);
+    }
+    return { packets: 0, duration: 0 } as TetheredCaptureResult;
+  },
+  async startTetheredCapture(_deviceIdentifier: string) {
+    if (Platform.OS === 'ios') {
+      console.warn(`[WifiCapture] ${LINKING_ERROR}`);
+    }
+    return { interface: '' };
+  },
+  async stopTetheredCapture(_deviceIdentifier?: string) {
+    if (Platform.OS === 'ios') {
+      console.warn(`[WifiCapture] ${LINKING_ERROR}`);
+    }
+  },
   addListener(eventName: string) {
     const subscription = fallbackEmitter.addListener(
       eventName,
@@ -114,6 +147,8 @@ export type {
   CaptureStatistics,
   DeepCaptureOptions,
   StartDeepCaptureResult,
+  WiFiNetwork,
+  TetheredCaptureResult,
 } from '../src/types/WiFiSniffer';
 
 export default WifiCapture;

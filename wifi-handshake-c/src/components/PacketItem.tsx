@@ -43,7 +43,8 @@ const createDataPreview = (data?: string): string | null => {
     return hexPreview.length > MAX_PREVIEW_LENGTH
       ? `${hexPreview.slice(0, MAX_PREVIEW_LENGTH)}…`
       : hexPreview;
-  } catch (_error) {
+  } catch (error) {
+    console.debug('Failed to build packet preview from base64 payload', error);
     return data.length > MAX_PREVIEW_LENGTH
       ? `${data.slice(0, MAX_PREVIEW_LENGTH)}…`
       : data;

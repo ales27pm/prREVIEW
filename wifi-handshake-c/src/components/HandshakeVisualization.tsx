@@ -35,6 +35,35 @@ export const HandshakeVisualization: React.FC<HandshakeVisualizationProps> = ({
     [packets]
   );
 
+  const packetStats = useMemo(() => {
+    if (!eapolPackets.length) {
+      return null;
+    }
+
+    const rssiValues = eapolPackets.map((packet) => packet.signal);
+    const minRssi = Math.min(...rssiValues);
+    const maxRssi = Math.max(...rssiValues);
+    const avgRssi = Math.round(
+      rssiValues.reduce((total, value) => total + value, 0) / rssiValues.length
+    );
+
+    const messageCounts = eapolPackets.reduce<Record<number, number>>(
+      (accumulator, packet) => {
+        const key = packet.message ?? 0;
+        accumulator[key] = (accumulator[key] ?? 0) + 1;
+        return accumulator;
+      },
+      {}
+    );
+
+    return {
+      minRssi,
+      maxRssi,
+      avgRssi,
+      messageCounts,
+    };
+  }, [eapolPackets]);
+
   const timelineData = useMemo(() => {
     if (!handshake) {
       return eapolPackets.map((packet) =>
@@ -227,6 +256,39 @@ export const HandshakeVisualization: React.FC<HandshakeVisualizationProps> = ({
         />
       </View>
       {renderSecurityAnalysis()}
+      <View style={styles.summaryContainer}>
+        <Text style={styles.summaryTitle}>Network Stats</Text>
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Channel</Text>
+          <Text style={styles.summaryValue}>{handshake.channel}</Text>
+        </View>
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Signal</Text>
+          <Text style={styles.summaryValue}>{handshake.signal} dBm</Text>
+        </View>
+        {packetStats && (
+          <>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>RSSI Range</Text>
+              <Text style={styles.summaryValue}>
+                {packetStats.minRssi} – {packetStats.maxRssi} dBm (avg{' '}
+                {packetStats.avgRssi})
+              </Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>EAPOL Trend</Text>
+              <Text style={styles.summaryValue}>
+                {[1, 2, 3, 4]
+                  .map(
+                    (message) =>
+                      `${message}: ${packetStats.messageCounts[message] ?? 0}`
+                  )
+                  .join('  ')}
+              </Text>
+            </View>
+          </>
+        )}
+      </View>
       <View style={styles.metadata}>
         <Text style={styles.metadataLabel}>BSSID</Text>
         <Text style={styles.metadataValue}>{handshake.bssid}</Text>
@@ -307,6 +369,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingVertical: 4,
+  },
+  summaryContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E5EA',
+  },
+  summaryTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: 8,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 2,
+  },
+  summaryLabel: {
+    fontSize: 12,
+    color: '#8E8E93',
+  },
+  summaryValue: {
+    fontSize: 12,
+    color: '#1C1C1E',
+    fontWeight: '500',
   },
   analysisLabel: {
     fontSize: 14,

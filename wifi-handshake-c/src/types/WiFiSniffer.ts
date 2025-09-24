@@ -3,14 +3,29 @@ import { NativeEventEmitter, NativeModules } from 'react-native';
 import { TurboModuleRegistry } from 'react-native';
 import type { Buffer } from 'buffer';
 
+export type WiFiSecurity =
+  | 'Open'
+  | 'WEP'
+  | 'WPA'
+  | 'WPA2'
+  | 'WPA3'
+  | 'Unknown'
+  | string;
+
 export interface WiFiNetwork {
   bssid: string;
   ssid: string;
   signal: number;
   channel: number;
-  security: 'Open' | 'WEP' | 'WPA' | 'WPA2' | 'WPA3' | 'Unknown';
   frequency: number;
+  security: WiFiSecurity | WiFiSecurity[];
   capabilities: string;
+  noise?: number | null;
+  lastSeen?: number;
+  isCached?: boolean;
+  channelWidth?: number;
+  phyMode?: string;
+  band?: '2.4GHz' | '5GHz' | '6GHz' | 'Unknown';
 }
 
 export type PacketType =
@@ -154,11 +169,32 @@ export const WiFiSnifferEvents = new NativeEventEmitter(
 
 export const isWiFiSnifferAvailable = Boolean(nativeModule);
 
+export interface PacketHeaders {
+  type?: string;
+  subtype?: string;
+  protocol?: string;
+  srcIP?: string;
+  dstIP?: string;
+  srcPort?: number;
+  dstPort?: number;
+  length?: number;
+  payloadLength?: number;
+  addr1?: string;
+  addr2?: string;
+  addr3?: string;
+  addr4?: string;
+  channel?: number;
+  frequency?: number;
+  signal?: number;
+  radiotapFlags?: number;
+  [key: string]: unknown;
+}
+
 export interface PacketData {
   id: string;
   timestamp: number;
   payload: string;
-  headers: Record<string, unknown>;
+  headers: PacketHeaders;
   preview: string;
 }
 
@@ -171,6 +207,11 @@ export interface StartDeepCaptureResult {
   sessionId: string;
 }
 
+export interface TetheredCaptureResult {
+  packets: number;
+  duration: number;
+}
+
 export interface CaptureStatistics {
   bytesCaptured: number;
   packetsProcessed: number;
@@ -178,7 +219,7 @@ export interface CaptureStatistics {
 }
 
 export interface WiFiCaptureNativeModule {
-  scan(): Promise<Array<Record<string, unknown>>>;
+  scan(): Promise<WiFiNetwork[]>;
   start(interfaceName: string): Promise<boolean>;
   stop(): Promise<boolean>;
   deauth(bssid: string, channel: number): Promise<boolean>;
@@ -187,6 +228,16 @@ export interface WiFiCaptureNativeModule {
   ): Promise<StartDeepCaptureResult>;
   stopDeepCapture(sessionId: string): Promise<void>;
   getCaptureStats(sessionId: string): Promise<CaptureStatistics>;
+  setAdvancedScanMode(enabled: boolean): Promise<void>;
+  getCachedScanResults(): Promise<WiFiNetwork[]>;
+  importTetheredCapture(
+    filePath: string,
+    options?: DeepCaptureOptions
+  ): Promise<TetheredCaptureResult>;
+  startTetheredCapture(
+    deviceIdentifier: string
+  ): Promise<{ interface: string }>;
+  stopTetheredCapture(deviceIdentifier?: string): Promise<void>;
   addListener(eventName: 'onDeepPacket'): void;
   removeListeners(count: number): void;
 }

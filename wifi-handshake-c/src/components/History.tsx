@@ -84,6 +84,7 @@ const History: React.FC = () => {
         content.length > 800 ? `${content.slice(0, 800)}…` : content
       );
     } catch (error) {
+      console.error('Failed to read exported handshake file', error);
       Alert.alert('Read Error', 'Unable to open exported handshake.');
     }
   };

@@ -111,10 +111,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
       return
     }
 
-    let parsed = PacketParser.parse(packet)
+    let parsed = PacketParser.parseIPPacket(packet)
     var headers = (parsed["headers"] as? [String: Any]) ?? [:]
     headers["length"] = packet.count
-    let preview = parsed["preview"] as? String ?? ""
+    let preview = parsed["preview"] as? String ?? PacketParser.hexPreview(for: packet)
 
     let message: [String: Any] = [
       "id": UUID().uuidString,
