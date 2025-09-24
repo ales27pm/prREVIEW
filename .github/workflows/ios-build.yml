@@ -138,29 +138,29 @@ jobs:
             exit 1
           fi
           mkdir -p "$(dirname "${EXPORT_OPTIONS_PATH}")"
-          cat <<PLIST > "${EXPORT_OPTIONS_PATH}"
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>method</key>
-  <string>ad-hoc</string>
-  <key>signingStyle</key>
-  <string>manual</string>
-  <key>provisioningProfiles</key>
-  <dict>
-    <key>${RESOLVED_BUNDLE_ID}</key>
-    <string>${PROVISIONING_PROFILE_NAME}</string>
-  </dict>
-  <key>teamID</key>
-  <string>${TEAM_ID}</string>
-  <key>stripSwiftSymbols</key>
-  <true/>
-  <key>compileBitcode</key>
-  <false/>
-</dict>
-</plist>
-PLIST
+          cat <<PLIST | sed 's/^          //' > "${EXPORT_OPTIONS_PATH}"
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>ad-hoc</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>${RESOLVED_BUNDLE_ID}</key>
+              <string>${PROVISIONING_PROFILE_NAME}</string>
+            </dict>
+            <key>teamID</key>
+            <string>${TEAM_ID}</string>
+            <key>stripSwiftSymbols</key>
+            <true/>
+            <key>compileBitcode</key>
+            <false/>
+          </dict>
+          </plist>
+          PLIST
           echo "exportOptions.plist created at ${EXPORT_OPTIONS_PATH}"
           cat "${EXPORT_OPTIONS_PATH}"
 
