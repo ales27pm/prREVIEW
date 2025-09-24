@@ -89,4 +89,39 @@ RCT_EXPORT_METHOD(getCaptureStats:(NSString *)sessionId
   [_impl statsForSession:sessionId resolve:resolve reject:reject];
 }
 
+RCT_EXPORT_METHOD(setAdvancedScanMode:(BOOL)enabled
+                  resolve:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject)
+{
+  [_impl setAdvancedScanModeWithEnabled:enabled resolve:resolve reject:reject];
+}
+
+RCT_EXPORT_METHOD(getCachedScanResults:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject)
+{
+  [_impl cachedScanResultsWithResolve:resolve reject:reject];
+}
+
+RCT_EXPORT_METHOD(importTetheredCapture:(NSString *)filePath
+                  options:(NSDictionary *)options
+                  resolve:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject)
+{
+  [_impl importTetheredCaptureWithFilePath:filePath options:options resolve:resolve reject:reject];
+}
+
+RCT_EXPORT_METHOD(startTetheredCapture:(NSString *)deviceIdentifier
+                  resolve:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject)
+{
+  [_impl startTetheredCaptureWithDeviceIdentifier:deviceIdentifier resolve:resolve reject:reject];
+}
+
+RCT_EXPORT_METHOD(stopTetheredCapture:(NSString *)deviceIdentifier
+                  resolve:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject)
+{
+  [_impl stopTetheredCaptureWithDeviceIdentifier:deviceIdentifier resolve:resolve reject:reject];
+}
+
 @end

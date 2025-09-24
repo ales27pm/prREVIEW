@@ -1,7 +1,11 @@
 import { Buffer } from 'buffer';
 import RNFS from 'react-native-fs';
 import { gzip } from 'pako';
-import type { ParsedHandshake } from '@/types/WiFiSniffer';
+import type {
+  ParsedHandshake,
+  PacketData,
+  WiFiNetwork,
+} from '@/types/WiFiSniffer';
 import { formatBytesAsHexDump } from '@/utils/formatters';
 
 export interface ExportOptions {
@@ -31,6 +35,19 @@ interface ExportData {
   security: Record<string, unknown>;
   analysis?: Record<string, unknown>;
   packets?: ExportPacket[];
+}
+
+export interface DeepCaptureExportOptions {
+  packets: PacketData[];
+  scanResults?: WiFiNetwork[];
+  baseName?: string;
+  compress?: boolean;
+}
+
+export interface DeepCaptureExportResult {
+  ipPcapPath?: string;
+  wifiPcapPath?: string;
+  summaryPath?: string;
 }
 
 export class ExportService {
@@ -87,6 +104,90 @@ export class ExportService {
     }
 
     return filepath;
+  }
+
+  static async exportDeepCapture(
+    options: DeepCaptureExportOptions
+  ): Promise<DeepCaptureExportResult> {
+    const packets = options.packets ?? [];
+    if (packets.length === 0) {
+      throw new Error('No packets provided for export');
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const baseName = options.baseName ?? 'deepcapture';
+    const basePath = `${RNFS.DocumentDirectoryPath}/${baseName}_${timestamp}`;
+
+    const ipPackets = packets.filter((packet) => {
+      const type = String(packet.headers?.type ?? '').toLowerCase();
+      if (type.startsWith('ipv')) {
+        return true;
+      }
+      return typeof packet.headers.protocol === 'string';
+    });
+
+    const ipIds = new Set(ipPackets.map((packet) => packet.id));
+    const wifiPackets = packets.filter((packet) => !ipIds.has(packet.id));
+
+    let ipPcapPath: string | undefined;
+    let wifiPcapPath: string | undefined;
+
+    if (ipPackets.length) {
+      const buffer = this.generateGenericPcap(ipPackets, 101);
+      const filePath = `${basePath}_ip.pcap`;
+      await RNFS.writeFile(
+        filePath,
+        Buffer.from(buffer).toString('base64'),
+        'base64'
+      );
+      if (options.compress) {
+        const compressedPath = await this.compressFile(filePath, 'base64');
+        await RNFS.unlink(filePath);
+        ipPcapPath = compressedPath;
+      } else {
+        ipPcapPath = filePath;
+      }
+    }
+
+    if (wifiPackets.length) {
+      const buffer = this.generateGenericPcap(wifiPackets, 105);
+      const filePath = `${basePath}_wifi.pcap`;
+      await RNFS.writeFile(
+        filePath,
+        Buffer.from(buffer).toString('base64'),
+        'base64'
+      );
+      if (options.compress) {
+        const compressedPath = await this.compressFile(filePath, 'base64');
+        await RNFS.unlink(filePath);
+        wifiPcapPath = compressedPath;
+      } else {
+        wifiPcapPath = filePath;
+      }
+    }
+
+    let summaryPath: string | undefined;
+    if (options.scanResults) {
+      const summary = {
+        generatedAt: new Date().toISOString(),
+        packetCount: packets.length,
+        ipPacketCount: ipPackets.length,
+        wifiPacketCount: wifiPackets.length,
+        scanResults: options.scanResults,
+      };
+      summaryPath = `${basePath}_summary.json`;
+      await RNFS.writeFile(
+        summaryPath,
+        JSON.stringify(summary, null, 2),
+        'utf8'
+      );
+    }
+
+    return {
+      ipPcapPath,
+      wifiPcapPath,
+      summaryPath,
+    };
   }
 
   private static buildExportData(
@@ -263,6 +364,38 @@ export class ExportService {
       recordHeader.writeUInt32LE(frameBuffer.length, 12);
 
       packetBuffers.push(recordHeader, frameBuffer);
+    });
+
+    return Buffer.concat(packetBuffers);
+  }
+
+  private static generateGenericPcap(
+    packets: PacketData[],
+    linkType: number
+  ): Buffer {
+    const header = Buffer.alloc(24);
+    header.writeUInt32LE(0xa1b2c3d4, 0);
+    header.writeUInt16LE(2, 4);
+    header.writeUInt16LE(4, 6);
+    header.writeInt32LE(0, 8);
+    header.writeUInt32LE(0, 12);
+    header.writeUInt32LE(65535, 16);
+    header.writeUInt32LE(linkType, 20);
+
+    const packetBuffers: Buffer[] = [header];
+
+    packets.forEach((packet) => {
+      const payload = Buffer.from(packet.payload, 'base64');
+      const recordHeader = Buffer.alloc(16);
+      const seconds = Math.floor(packet.timestamp / 1000);
+      const microseconds = Math.floor((packet.timestamp % 1000) * 1000);
+
+      recordHeader.writeUInt32LE(seconds, 0);
+      recordHeader.writeUInt32LE(microseconds, 4);
+      recordHeader.writeUInt32LE(payload.length, 8);
+      recordHeader.writeUInt32LE(payload.length, 12);
+
+      packetBuffers.push(recordHeader, payload);
     });
 
     return Buffer.concat(packetBuffers);

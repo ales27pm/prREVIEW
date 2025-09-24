@@ -14,6 +14,7 @@ target 'WiFiHandshakeCapture' do
 
   permissions_path = '../node_modules/react-native-permissions/ios'
   pod 'Permission-LocationWhenInUse', :path => "#{permissions_path}/LocationWhenInUse.podspec"
+  pod 'libpcap', :git => 'https://github.com/libpcap/libpcap.git'
 
   target 'WiFiHandshakeCaptureTests' do
     inherit! :complete
@@ -23,6 +24,7 @@ end
 target 'WifiCaptureExtension' do
   inherit! :complete
   pod 'React-Core', :path => '../node_modules/react-native/'
+  pod 'libpcap', :git => 'https://github.com/libpcap/libpcap.git'
 end
 
 post_install do |installer|

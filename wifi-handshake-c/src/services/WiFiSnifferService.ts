@@ -15,6 +15,7 @@ import {
 } from '@/types/WiFiSniffer';
 import WiFiSnifferModule from '@/types/WiFiSniffer';
 import { parseChannelFromFrequency } from '@/utils/formatters';
+import WifiCapture from 'specs/WifiCaptureSpec';
 
 type Subscription = { remove: () => void };
 
@@ -74,13 +75,14 @@ class WiFiSnifferService {
 
   private eventSubscriptions: Subscription[] = [];
 
-  private handshakeListeners = new Set<
-    (payload: HandshakeCompletePayload) => void
-  >();
+  private handshakeListeners: Set<(payload: HandshakeCompletePayload) => void> =
+    new Set();
 
   private history: HistoryItem[] = [];
 
   private historyLoaded = false;
+
+  private advancedScanEnabled = false;
 
   async initialize(): Promise<void> {
     try {
@@ -293,16 +295,57 @@ class WiFiSnifferService {
 
   async scanNetworks(): Promise<WiFiNetwork[]> {
     try {
+      if (this.advancedScanEnabled) {
+        const networks = await WifiCapture.scan();
+        if (networks.length) {
+          return networks.map((network) => ({
+            ...network,
+            channel:
+              network.channel || parseChannelFromFrequency(network.frequency),
+            band: this.resolveBand(network.frequency),
+          }));
+        }
+
+        const cached = await WifiCapture.getCachedScanResults();
+        return cached.map((network) => ({
+          ...network,
+          channel:
+            network.channel || parseChannelFromFrequency(network.frequency),
+          band: this.resolveBand(network.frequency),
+        }));
+      }
+
       const networks = await WiFiSnifferModule.scanNetworks();
       return networks.map((network) => ({
         ...network,
         channel:
           network.channel || parseChannelFromFrequency(network.frequency),
+        band: this.resolveBand(network.frequency),
       }));
     } catch (error) {
       console.error('Network scan failed:', error);
       return [];
     }
+  }
+
+  async setAdvancedScanMode(enabled: boolean): Promise<void> {
+    this.advancedScanEnabled = enabled;
+  }
+
+  private resolveBand(frequency: number | undefined): WiFiNetwork['band'] {
+    if (typeof frequency !== 'number' || Number.isNaN(frequency)) {
+      return 'Unknown';
+    }
+    if (frequency >= 2400 && frequency <= 2500) {
+      return '2.4GHz';
+    }
+    if (frequency >= 4900 && frequency <= 5899) {
+      return '5GHz';
+    }
+    if (frequency >= 5925 && frequency <= 7125) {
+      return '6GHz';
+    }
+    return 'Unknown';
   }
 
   async startCapture(
