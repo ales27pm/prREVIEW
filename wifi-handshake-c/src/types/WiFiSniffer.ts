@@ -172,6 +172,9 @@ export const isWiFiSnifferAvailable = Boolean(nativeModule);
 export interface PacketHeaders {
   type?: string;
   subtype?: string;
+  frameType?: string;
+  frameSubtype?: number | string;
+  frameControl?: number;
   protocol?: string;
   srcIP?: string;
   dstIP?: string;
@@ -179,6 +182,7 @@ export interface PacketHeaders {
   dstPort?: number;
   length?: number;
   payloadLength?: number;
+  packetSize?: number;
   addr1?: string;
   addr2?: string;
   addr3?: string;
@@ -186,7 +190,30 @@ export interface PacketHeaders {
   channel?: number;
   frequency?: number;
   signal?: number;
+  noise?: number;
   radiotapFlags?: number;
+  radiotapPresentFlags?: number;
+  channelFlags?: number;
+  protocolFamily?: string;
+  isEapol?: boolean;
+  eapolVersion?: number;
+  eapolLength?: number;
+  eapolMessage?: number;
+  descriptorType?: number;
+  keyInfo?: number;
+  keyLength?: number;
+  keyDataLength?: number;
+  keyMicPresent?: boolean;
+  keyEncrypted?: boolean;
+  keyAck?: boolean;
+  keyDescriptorVersion?: number;
+  replayCounter?: string;
+  keyNonce?: string;
+  keyIV?: string;
+  keyRSC?: string;
+  keyID?: string;
+  keyMIC?: string;
+  keyData?: string;
   [key: string]: unknown;
 }
 

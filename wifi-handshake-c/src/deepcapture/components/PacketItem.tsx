@@ -16,8 +16,37 @@ const formatTimestamp = (timestamp: number): string => {
 };
 
 const PacketItem: React.FC<PacketItemProps> = React.memo(({ packet }) => {
-  const type =
-    typeof packet.headers.type === 'string' ? packet.headers.type : 'Unknown';
+  const typeLabel = useMemo(() => {
+    if (typeof packet.headers.type === 'string' && packet.headers.type.length) {
+      return packet.headers.type;
+    }
+    if (
+      typeof packet.headers.frameType === 'string' &&
+      packet.headers.frameType.length
+    ) {
+      return packet.headers.frameType;
+    }
+    return 'Unknown';
+  }, [packet.headers.frameType, packet.headers.type]);
+
+  const subtypeLabel = useMemo(() => {
+    if (
+      typeof packet.headers.subtype === 'string' &&
+      packet.headers.subtype.length
+    ) {
+      return packet.headers.subtype;
+    }
+    if (
+      typeof packet.headers.frameSubtype === 'string' &&
+      packet.headers.frameSubtype.length
+    ) {
+      return packet.headers.frameSubtype;
+    }
+    if (typeof packet.headers.frameSubtype === 'number') {
+      return `Subtype ${packet.headers.frameSubtype}`;
+    }
+    return undefined;
+  }, [packet.headers.frameSubtype, packet.headers.subtype]);
 
   const protocol = useMemo(() => {
     if (typeof packet.headers.protocol === 'string') {
@@ -75,6 +104,20 @@ const PacketItem: React.FC<PacketItemProps> = React.memo(({ packet }) => {
     return undefined;
   }, [packet.headers.signal]);
 
+  const noise = useMemo(() => {
+    if (typeof packet.headers.noise === 'number') {
+      return `${packet.headers.noise} dBm noise`;
+    }
+    return undefined;
+  }, [packet.headers.noise]);
+
+  const packetSize = useMemo(() => {
+    if (typeof packet.headers.packetSize === 'number') {
+      return `${packet.headers.packetSize} bytes`;
+    }
+    return `${packet.binary.length} bytes`;
+  }, [packet.binary.length, packet.headers.packetSize]);
+
   const infoLines = useMemo(() => {
     const lines: string[] = [];
     if (protocol) {
@@ -86,6 +129,9 @@ const PacketItem: React.FC<PacketItemProps> = React.memo(({ packet }) => {
     if (destinationLabel) {
       lines.push(`Destination: ${destinationLabel}`);
     }
+    if (!protocol && !destinationLabel && sourceLabel) {
+      lines.push(`Source MAC: ${sourceLabel}`);
+    }
     if (channel) {
       lines.push(channel);
     }
@@ -95,8 +141,57 @@ const PacketItem: React.FC<PacketItemProps> = React.memo(({ packet }) => {
     if (signal) {
       lines.push(`Signal: ${signal}`);
     }
+    if (noise) {
+      lines.push(noise);
+    }
+    lines.push(`Size: ${packetSize}`);
     return lines;
-  }, [protocol, sourceLabel, destinationLabel, channel, frequency, signal]);
+  }, [
+    channel,
+    destinationLabel,
+    frequency,
+    noise,
+    packetSize,
+    protocol,
+    signal,
+    sourceLabel,
+  ]);
+
+  const handshakeLines = useMemo(() => {
+    if (!packet.isHandshake) {
+      return [] as string[];
+    }
+
+    const lines: string[] = [];
+    if (typeof packet.headers.eapolMessage === 'number') {
+      lines.push(`EAPOL Message: M${packet.headers.eapolMessage}`);
+    }
+    if (typeof packet.headers.keyInfo === 'number') {
+      lines.push(`Key Info: 0x${packet.headers.keyInfo.toString(16)}`);
+    }
+    if (
+      typeof packet.headers.replayCounter === 'string' &&
+      packet.headers.replayCounter.length > 0
+    ) {
+      lines.push(`Replay Counter: ${packet.headers.replayCounter}`);
+    }
+    if (typeof packet.headers.keyMicPresent === 'boolean') {
+      lines.push(
+        `MIC: ${packet.headers.keyMicPresent ? 'present' : 'missing'}`
+      );
+    }
+    if (typeof packet.headers.keyDescriptorVersion === 'number') {
+      lines.push(`Descriptor Version: ${packet.headers.keyDescriptorVersion}`);
+    }
+    return lines;
+  }, [
+    packet.headers.eapolMessage,
+    packet.headers.keyDescriptorVersion,
+    packet.headers.keyInfo,
+    packet.headers.keyMicPresent,
+    packet.headers.replayCounter,
+    packet.isHandshake,
+  ]);
 
   return (
     <View style={styles.container}>
@@ -105,10 +200,15 @@ const PacketItem: React.FC<PacketItemProps> = React.memo(({ packet }) => {
         {packet.preview}
       </Text>
       <Text style={styles.type}>
-        {protocol ? `${type} · ${protocol}` : `Type: ${type}`}
+        {[typeLabel, subtypeLabel, protocol].filter(Boolean).join(' · ')}
       </Text>
       {infoLines.map((line) => (
         <Text key={line} style={styles.metadata}>
+          {line}
+        </Text>
+      ))}
+      {handshakeLines.map((line) => (
+        <Text key={line} style={styles.handshakeDetail}>
           {line}
         </Text>
       ))}
@@ -150,6 +250,11 @@ const styles = StyleSheet.create({
   metadata: {
     fontSize: 12,
     color: '#48484A',
+    marginTop: 2,
+  },
+  handshakeDetail: {
+    fontSize: 12,
+    color: '#0A84FF',
     marginTop: 2,
   },
   badge: {
