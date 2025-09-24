@@ -1,7 +1,34 @@
 import React, { forwardRef, useImperativeHandle } from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
+import { NativeModules } from 'react-native';
 import type { DeepPacketEvent } from 'specs/WifiCaptureSpec';
 import usePackets, { type UsePacketsResult } from '../usePackets';
+
+jest.mock('react-native', () => {
+  const { EventEmitter } = require('events');
+
+  class MockNativeEventEmitter {
+    private readonly emitter = new EventEmitter();
+
+    constructor(_nativeModule?: unknown) {}
+
+    addListener(eventName: string, listener: (...args: unknown[]) => void) {
+      this.emitter.on(eventName, listener);
+      return {
+        remove: () => this.emitter.removeListener(eventName, listener),
+      };
+    }
+
+    removeAllListeners(eventName: string) {
+      this.emitter.removeAllListeners(eventName);
+    }
+  }
+
+  return {
+    NativeModules: {},
+    NativeEventEmitter: MockNativeEventEmitter,
+  };
+});
 
 jest.mock('specs/WifiCaptureSpec', () => {
   const { EventEmitter } = require('events');
@@ -24,6 +51,11 @@ jest.mock('specs/WifiCaptureSpec', () => {
       },
     },
   };
+});
+
+beforeEach(() => {
+  // Ensure the hook uses the shared mock emitter rather than instantiating a NativeEventEmitter.
+  (NativeModules as Record<string, unknown>).WifiCapture = undefined;
 });
 
 const HookHarness = forwardRef<UsePacketsResult, { sessionId: string | null }>(

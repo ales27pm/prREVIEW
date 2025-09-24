@@ -1,34 +1,55 @@
+import Foundation
 import Network
 import os.log
 
 final class UDPProxy {
-  private let connection: NWConnection
   private let logger = Logger(subsystem: "WifiCaptureExtension", category: "UDPProxy")
-  private let queue = DispatchQueue(label: "WifiCaptureExtension.UDP", qos: .utility)
+  private var connection: NWConnection?
 
-  init(port: Int) throws {
-    guard let endpointPort = NWEndpoint.Port(rawValue: UInt16(port)) else {
-      throw NSError(domain: "WifiCaptureExtension", code: -2, userInfo: [NSLocalizedDescriptionKey: "Invalid UDP port"])
+  func start(host: String, port: UInt16, queue: DispatchQueue) throws {
+    guard let endpointPort = NWEndpoint.Port(rawValue: port) else {
+      throw NSError(
+        domain: "UDPProxy",
+        code: -1,
+        userInfo: [NSLocalizedDescriptionKey: "Invalid port"]
+      )
     }
 
-    connection = NWConnection(host: .ipv4(.loopback), port: endpointPort, using: .udp)
+    let connection = NWConnection(to: .hostPort(host: .init(host), port: endpointPort), using: .udp)
     connection.stateUpdateHandler = { [weak self] state in
-      if case let .failed(error) = state {
-        self?.logger.error("UDP connection failed: \(error.localizedDescription, privacy: .public)")
+      switch state {
+      case .ready:
+        self?.logger.info("UDP proxy connection ready")
+      case .failed(let error):
+        self?.logger.error("UDP proxy failed: \(error.localizedDescription, privacy: .public)")
+      default:
+        break
       }
     }
+
     connection.start(queue: queue)
+    self.connection = connection
   }
 
-  func forward(data: Data) {
-    connection.send(content: data, completion: .contentProcessed { [weak self] error in
-      if let error {
-        self?.logger.error("UDP send error: \(error.localizedDescription, privacy: .public)")
-      }
+  func send(data: Data, completion: @escaping (Error?) -> Void) {
+    guard let connection else {
+      let error = NSError(
+        domain: "UDPProxy",
+        code: -2,
+        userInfo: [NSLocalizedDescriptionKey: "No active connection"]
+      )
+      logger.error("Attempted to send without active connection")
+      completion(error)
+      return
+    }
+
+    connection.send(content: data, completion: .contentProcessed { error in
+      completion(error)
     })
   }
 
   func stop() {
-    connection.cancel()
+    connection?.cancel()
+    connection = nil
   }
 }

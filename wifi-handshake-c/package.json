@@ -5,6 +5,7 @@
   "scripts": {
     "android": "react-native run-android",
     "ios": "react-native run-ios",
+    "ios:build": "cd ios && xcodebuild -workspace WiFiHandshakeCapture.xcworkspace -scheme WiFiHandshakeCapture -configuration Debug -sdk iphonesimulator",
     "start": "react-native start",
     "test": "jest",
     "lint": "ESLINT_USE_FLAT_CONFIG=false eslint --config .eslintrc.js . --ext .ts,.tsx",

@@ -15,6 +15,10 @@ final class WifiCaptureImpl: NSObject {
   private let queue: DispatchQueue
   private let queueKey = DispatchSpecificKey<Void>()
 
+  private let maxRetries = 3
+  private let baseRetryDelay: TimeInterval = 1.0
+  private let tunnelTimeout: TimeInterval = 10.0
+
   private var tunnelManager: NETunnelProviderManager?
   private var currentSessionId: String?
   private var currentPort: UInt16 = 0
@@ -111,13 +115,6 @@ final class WifiCaptureImpl: NSObject {
     let port = UInt16(value)
 
     let normalizedFilter = filter?.isEmpty == true ? nil : filter
-    let normalizedFilterData = normalizedFilter?.data(using: .utf8)
-
-    performOnQueue(wait: true) {
-      self.filterString = normalizedFilter
-      self.filterData = normalizedFilterData
-    }
-
     loadTunnelManager { [weak self] result in
       guard let self else { return }
 
@@ -126,51 +123,196 @@ final class WifiCaptureImpl: NSObject {
         self.logger.error("Failed to load tunnel manager: \(error.localizedDescription, privacy: .public)")
         self.handleStartFailure(code: "TUNNEL_LOAD", message: error.localizedDescription, error: error, manager: nil, reject: reject)
       case .success(let manager):
-        self.configure(manager: manager, port: port, filter: normalizedFilter)
-        manager.saveToPreferences { saveError in
-          if let saveError {
-            self.logger.error("Saving tunnel configuration failed: \(saveError.localizedDescription, privacy: .public)")
-            self.handleStartFailure(code: "TUNNEL_SAVE", message: saveError.localizedDescription, error: saveError, manager: manager, reject: reject)
-            return
-          }
+        self.startTunnelWithRetry(
+          manager: manager,
+          port: port,
+          filter: normalizedFilter,
+          attempt: 1,
+          resolve: resolve,
+          reject: reject
+        )
+      }
+    }
+  }
 
-          do {
-            try manager.connection.startVPNTunnel()
-          } catch {
-            self.logger.error("Starting VPN tunnel failed: \(error.localizedDescription, privacy: .public)")
-            self.handleStartFailure(code: "TUNNEL_START", message: error.localizedDescription, error: error, manager: manager, reject: reject)
-            return
-          }
+  private func startTunnelWithRetry(
+    manager: NETunnelProviderManager,
+    port: UInt16,
+    filter: String?,
+    attempt: Int,
+    resolve: @escaping RCTPromiseResolveBlock,
+    reject: @escaping RCTPromiseRejectBlock
+  ) {
+    guard attempt <= maxRetries else {
+      cleanupTunnel(manager: manager)
+      resetState()
+      let error = NSError(
+        domain: "WifiCapture",
+        code: -3,
+        userInfo: [NSLocalizedDescriptionKey: "Failed to start tunnel after \(maxRetries) attempts"]
+      )
+      DispatchQueue.main.async {
+        reject("TUNNEL_MAX_RETRIES", error.localizedDescription, error)
+      }
+      return
+    }
 
-          let sessionId = UUID().uuidString
-          self.performOnQueue(wait: true) {
-            self.tunnelManager = manager
-            self.currentPort = port
-            self.currentSessionId = sessionId
-            self.stats = CaptureStats()
-          }
+    performOnQueue(wait: true) {
+      self.filterString = filter
+      self.filterData = filter?.data(using: .utf8)
+    }
 
-          do {
-            try self.startUdpListener(port: port)
-          } catch {
-            self.logger.error("UDP listener failed: \(error.localizedDescription, privacy: .public)")
-            if let nwError = error as? NWError, case .posix(let posixError) = nwError, posixError == .EADDRINUSE {
-              self.handleStartFailure(
-                code: "PORT_BOUND",
-                message: "UDP port \(port) is already in use",
-                error: error,
-                manager: manager,
-                reject: reject
-              )
-            } else {
-              self.handleStartFailure(code: "UDP_LISTENER", message: error.localizedDescription, error: error, manager: manager, reject: reject)
-            }
-            return
-          }
+    configure(manager: manager, port: port, filter: filter)
 
+    manager.saveToPreferences { [weak self] saveError in
+      guard let self else { return }
+
+      if let saveError {
+        self.logger.error("Saving tunnel configuration failed: \(saveError.localizedDescription, privacy: .public)")
+        self.handleStartFailure(
+          code: "TUNNEL_SAVE",
+          message: saveError.localizedDescription,
+          error: saveError,
+          manager: manager,
+          reject: reject
+        )
+        return
+      }
+
+      do {
+        try manager.connection.startVPNTunnel()
+      } catch {
+        self.logger.error("Starting VPN tunnel failed: \(error.localizedDescription, privacy: .public)")
+        self.handleStartFailure(
+          code: "TUNNEL_START",
+          message: error.localizedDescription,
+          error: error,
+          manager: manager,
+          reject: reject
+        )
+        return
+      }
+
+      let connection = manager.connection
+      var finished = false
+      var token: NSObjectProtocol?
+
+      func clearObserver() {
+        if let tokenValue = token {
+          NotificationCenter.default.removeObserver(tokenValue)
+          token = nil
+        }
+      }
+
+      func succeed() {
+        guard !finished else { return }
+        finished = true
+        clearObserver()
+
+        let sessionId = UUID().uuidString
+        self.performOnQueue(wait: true) {
+          self.tunnelManager = manager
+          self.currentPort = port
+          self.currentSessionId = sessionId
+          self.stats = CaptureStats()
+          self.filterString = filter
+          self.filterData = filter?.data(using: .utf8)
+        }
+
+        do {
+          try self.startUdpListener(port: port)
           DispatchQueue.main.async {
             resolve(["sessionId": sessionId])
           }
+        } catch {
+          self.logger.error("UDP listener failed: \(error.localizedDescription, privacy: .public)")
+          if let nwError = error as? NWError, case .posix(let posixError) = nwError, posixError == .EADDRINUSE {
+            self.handleStartFailure(
+              code: "PORT_BOUND",
+              message: "UDP port \(port) is already in use",
+              error: error,
+              manager: manager,
+              reject: reject
+            )
+          } else {
+            self.handleStartFailure(
+              code: "UDP_LISTENER",
+              message: error.localizedDescription,
+              error: error,
+              manager: manager,
+              reject: reject
+            )
+          }
+        }
+      }
+
+      func failAndRetry(_ reason: String) {
+        guard !finished else { return }
+        finished = true
+        clearObserver()
+        self.cleanupTunnel(manager: manager)
+        self.resetState()
+
+        if attempt >= self.maxRetries {
+          let error = NSError(
+            domain: "WifiCapture",
+            code: -3,
+            userInfo: [
+              NSLocalizedDescriptionKey: "Failed to start tunnel after \(self.maxRetries) attempts (\(reason))",
+            ]
+          )
+          self.logger.error("Tunnel start failed: \(reason, privacy: .public)")
+          DispatchQueue.main.async {
+            reject("TUNNEL_MAX_RETRIES", error.localizedDescription, error)
+          }
+          return
+        }
+
+        let retryDelay = self.baseRetryDelay * pow(2.0, Double(attempt - 1))
+        self.logger.warning(
+          "Tunnel start failed (\(reason, privacy: .public)), retrying (\(attempt, privacy: .public)/\(self.maxRetries, privacy: .public)) after \(retryDelay, privacy: .public)s"
+        )
+        let deadline = DispatchTime.now() + .milliseconds(Int(retryDelay * 1000))
+        DispatchQueue.main.asyncAfter(deadline: deadline) {
+          self.startTunnelWithRetry(
+            manager: manager,
+            port: port,
+            filter: filter,
+            attempt: attempt + 1,
+            resolve: resolve,
+            reject: reject
+          )
+        }
+      }
+
+      token = NotificationCenter.default.addObserver(
+        forName: .NEVPNStatusDidChange,
+        object: connection,
+        queue: .main
+      ) { _ in
+        switch connection.status {
+        case .connected:
+          succeed()
+        case .invalid, .disconnected:
+          failAndRetry("status=\(String(describing: connection.status))")
+        default:
+          break
+        }
+      }
+
+      switch connection.status {
+      case .connected:
+        succeed()
+      case .invalid, .disconnected:
+        failAndRetry("status=\(String(describing: connection.status))")
+      default:
+        break
+      }
+
+      let timeoutDeadline = DispatchTime.now() + .milliseconds(Int(self.tunnelTimeout * 1000))
+      DispatchQueue.main.asyncAfter(deadline: timeoutDeadline) {
+        if !finished {
+          failAndRetry("timeout \(self.tunnelTimeout)s")
         }
       }
     }
@@ -235,20 +377,12 @@ final class WifiCaptureImpl: NSObject {
 
   private func configure(manager: NETunnelProviderManager, port: UInt16, filter: String?) {
     let protocolConfiguration = NETunnelProviderProtocol()
-    if let identifier = cachedExtensionBundleIdentifier {
-      protocolConfiguration.providerBundleIdentifier = identifier
-    } else if let baseIdentifier = Bundle.main.bundleIdentifier {
-      protocolConfiguration.providerBundleIdentifier = "\(baseIdentifier).WifiCaptureExtension"
-    }
+    protocolConfiguration.providerBundleIdentifier = cachedExtensionBundleIdentifier ?? "com.wifihandshakecapture.WiFiHandshakeCapture.WifiCaptureExtension"
     protocolConfiguration.serverAddress = "127.0.0.1"
     protocolConfiguration.providerConfiguration = [
       "udpPort": Int(port),
       "filter": filter ?? "",
     ]
-
-    if protocolConfiguration.providerBundleIdentifier == nil {
-      logger.warning("Provider bundle identifier not resolved; tunnel start likely to fail")
-    }
 
     manager.protocolConfiguration = protocolConfiguration
     manager.isEnabled = true
@@ -276,27 +410,10 @@ final class WifiCaptureImpl: NSObject {
   }
 
   private static func locateExtensionBundleIdentifier() -> String? {
-    guard let pluginsURL = Bundle.main.builtInPlugInsURL else {
+    guard let appBundleIdentifier = Bundle.main.bundleIdentifier else {
       return nil
     }
-
-    let expectedExtensionName = "WifiCaptureExtension.appex"
-    let specificURL = pluginsURL.appendingPathComponent(expectedExtensionName)
-    if let bundle = Bundle(url: specificURL), let identifier = bundle.bundleIdentifier {
-      return identifier
-    }
-
-    guard let contents = try? FileManager.default.contentsOfDirectory(at: pluginsURL, includingPropertiesForKeys: nil) else {
-      return nil
-    }
-
-    for url in contents where url.pathExtension == "appex" {
-      if let identifier = Bundle(url: url)?.bundleIdentifier, identifier.hasSuffix("WifiCaptureExtension") {
-        return identifier
-      }
-    }
-
-    return nil
+    return "\(appBundleIdentifier).WifiCaptureExtension"
   }
 
   private func startUdpListener(port: UInt16) throws {
@@ -323,10 +440,16 @@ final class WifiCaptureImpl: NSObject {
       connection.stateUpdateHandler = { [weak self, weak connection] state in
         guard let self, let connection else { return }
         let identifier = ObjectIdentifier(connection)
-        if case .ready = state {
+        switch state {
+        case .ready:
           self.receive(on: connection)
-        } else if case .failed = state || state == .cancelled {
+        case .failed(let error):
+          self.logger.error("UDP connection failed: \(error.localizedDescription, privacy: .public)")
           self.connections.removeValue(forKey: identifier)
+        case .cancelled:
+          self.connections.removeValue(forKey: identifier)
+        default:
+          break
         }
       }
       connection.start(queue: self.queue)
@@ -466,7 +589,7 @@ extension WifiCaptureImpl {
   private func handleStartFailure(
     code: String,
     message: String,
-    error: Error?,
+    error: Error,
     manager: NETunnelProviderManager?,
     reject: @escaping RCTPromiseRejectBlock
   ) {

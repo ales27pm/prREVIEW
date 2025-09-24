@@ -1,50 +1,19 @@
-import type { TurboModule } from 'react-native';
+import type { EmitterSubscription, TurboModule } from 'react-native';
 import {
   NativeEventEmitter,
   NativeModules,
   Platform,
   TurboModuleRegistry,
 } from 'react-native';
+import type {
+  DeepCaptureOptions,
+  PacketData,
+  WiFiCaptureNativeModule,
+} from '../src/types/WiFiSniffer';
 
-export interface DeepCaptureOptions {
-  udpPort: number;
-  filter?: string;
-}
+export type DeepPacketEvent = PacketData;
 
-export interface CaptureStatistics {
-  bytesCaptured: number;
-  packetsProcessed: number;
-  dropped: number;
-}
-
-export interface StartDeepCaptureResult {
-  sessionId: string;
-}
-
-export type DeepPacketEvent = {
-  id: string;
-  timestamp: number;
-  payload: string;
-  headers: Record<string, unknown>;
-  preview?: string;
-};
-
-export interface Spec extends TurboModule {
-  // Legacy surface
-  scan: () => Promise<Array<Record<string, unknown>>>;
-  start: (interfaceName: string) => Promise<boolean>;
-  stop: () => Promise<boolean>;
-  deauth: (bssid: string, channel: number) => Promise<boolean>;
-
-  // Deep mode APIs
-  startDeepCapture: (
-    options: DeepCaptureOptions
-  ) => Promise<StartDeepCaptureResult>;
-  stopDeepCapture: (sessionId: string) => Promise<void>;
-  getCaptureStats: (sessionId: string) => Promise<CaptureStatistics>;
-  addListener: (eventName: string) => void;
-  removeListeners: (count: number) => void;
-}
+export type Spec = TurboModule & WiFiCaptureNativeModule;
 
 const LINKING_ERROR =
   "The native module 'WifiCapture' is not linked. Ensure pods are installed and that the app was rebuilt.";
@@ -52,6 +21,25 @@ const LINKING_ERROR =
 const nativeModule = TurboModuleRegistry.get<Spec>('WifiCapture');
 
 const fallbackEmitter = new NativeEventEmitter();
+const fallbackSubscriptions: EmitterSubscription[] = [];
+
+const trackFallbackSubscription = (subscription: EmitterSubscription) => {
+  fallbackSubscriptions.push(subscription);
+};
+
+const removeFallbackListeners = (count: number) => {
+  if (count <= 0) {
+    return;
+  }
+
+  for (let index = 0; index < count; index += 1) {
+    const subscription = fallbackSubscriptions.pop();
+    if (!subscription) {
+      break;
+    }
+    subscription.remove();
+  }
+};
 
 const createFallbackModule = (): Spec => ({
   async scan() {
@@ -78,40 +66,54 @@ const createFallbackModule = (): Spec => ({
     }
     return false;
   },
-  async startDeepCapture() {
+  async startDeepCapture(_options: DeepCaptureOptions) {
     if (Platform.OS === 'ios') {
       console.warn(`[WifiCapture] ${LINKING_ERROR}`);
     }
     return { sessionId: 'fallback' };
   },
-  async stopDeepCapture() {
+  async stopDeepCapture(_sessionId: string) {
     if (Platform.OS === 'ios') {
       console.warn(`[WifiCapture] ${LINKING_ERROR}`);
     }
   },
-  async getCaptureStats() {
+  async getCaptureStats(_sessionId: string) {
     if (Platform.OS === 'ios') {
       console.warn(`[WifiCapture] ${LINKING_ERROR}`);
     }
     return { bytesCaptured: 0, packetsProcessed: 0, dropped: 0 };
   },
   addListener(eventName: string) {
-    fallbackEmitter.addListener(eventName, () => undefined);
+    const subscription = fallbackEmitter.addListener(
+      eventName,
+      () => undefined
+    );
+    trackFallbackSubscription(subscription);
   },
   removeListeners(count: number) {
-    for (let index = 0; index < count; index += 1) {
-      fallbackEmitter.removeAllListeners('onDeepPacket');
-    }
+    removeFallbackListeners(count);
   },
 });
 
 const WifiCapture: Spec = nativeModule ?? createFallbackModule();
 
+const nativeBridgeModule =
+  typeof NativeModules !== 'undefined' && NativeModules != null
+    ? ((NativeModules as Record<string, unknown>).WifiCapture as
+        | object
+        | undefined)
+    : undefined;
+
 export const WifiCaptureEvents = nativeModule
   ? new NativeEventEmitter(
-      (NativeModules.WifiCapture as unknown as object | undefined) ??
-        (nativeModule as unknown as object)
+      nativeBridgeModule ?? (nativeModule as unknown as object)
     )
   : fallbackEmitter;
+
+export type {
+  CaptureStatistics,
+  DeepCaptureOptions,
+  StartDeepCaptureResult,
+} from '../src/types/WiFiSniffer';
 
 export default WifiCapture;

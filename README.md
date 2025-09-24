@@ -33,6 +33,17 @@ wifi-handshake-c/
    - iOS (simulator): `npm run ios`
    - Android (device/emulator): `npm run android`
 
+4. **Run a local iOS build without signing**
+
+   Prerequisites: Install the Xcode command-line tools and CocoaPods. If Pods have not been installed yet for the iOS workspace, run `npx pod-install` first to avoid build failures.
+
+   ```bash
+   npx pod-install
+   npm run ios:build
+   ```
+
+   The command builds the iOS workspace for the simulator, which is useful when Xcode signing assets are unavailable (for example on CI or when working without provisioning profiles).
+
 ## Quality checks
 
 - Lint the codebase with `npm run lint`.
