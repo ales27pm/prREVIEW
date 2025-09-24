@@ -5,6 +5,11 @@ on:
     branches: ["main"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      ios-app-path:
+        description: "Relative path to the app directory that contains the ios project folder."
+        required: false
+        default: ""
 
 jobs:
   build-sign-export:
@@ -17,12 +22,12 @@ jobs:
       EXPORT_PATH: ${{ github.workspace }}/build/ios/export
       EXPORT_OPTIONS_PATH: ${{ github.workspace }}/build/ios/exportOptions.plist
       KEYCHAIN_PATH: ${{ runner.temp }}/ios-build.keychain-db
+      IOS_APP_PATH: ${{ github.event.inputs.ios-app-path || vars.IOS_APP_PATH || '' }}
       P12_BASE64: ${{ secrets.P12_BASE64 }}
       P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
       MOBILEPROVISION_BASE64: ${{ secrets.MOBILEPROVISION_BASE64 }}
       KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
       TEAM_ID: ${{ secrets.TEAM_ID }}
-      PROFILE_UUID: ${{ secrets.PROFILE_UUID }}
       BUNDLE_ID_PREFIX: ${{ secrets.BUNDLE_ID_PREFIX }}
       BUNDLE_ID_SUFFIX: ${{ secrets.BUNDLE_ID_SUFFIX }}
     steps:
@@ -54,17 +59,16 @@ jobs:
             exit 1
           fi
           mkdir -p signing
-          python3 - <<'PY'
-import base64
-import os
-from pathlib import Path
-
-cert_data = os.environ["P12_BASE64"].encode()
-profile_data = os.environ["MOBILEPROVISION_BASE64"].encode()
-Path("signing").mkdir(parents=True, exist_ok=True)
-Path("signing/cert.p12").write_bytes(base64.b64decode(cert_data))
-Path("signing/profile.mobileprovision").write_bytes(base64.b64decode(profile_data))
-PY
+          decode_base64() {
+            local data="$1"
+            local output="$2"
+            if printf '%s' "${data}" | base64 --decode > "${output}" 2>/dev/null; then
+              return 0
+            fi
+            printf '%s' "${data}" | base64 -d > "${output}"
+          }
+          decode_base64 "${P12_BASE64}" signing/cert.p12
+          decode_base64 "${MOBILEPROVISION_BASE64}" signing/profile.mobileprovision
           echo "Decoded signing assets into the signing/ directory."
           echo "SHA256 (cert.p12):"
           shasum -a 256 signing/cert.p12
@@ -101,14 +105,25 @@ PY
         run: |
           set -euo pipefail
           PROFILE_DIR="${HOME}/Library/MobileDevice/Provisioning Profiles"
+          PROFILE_PLIST="${RUNNER_TEMP}/profile.plist"
+          security cms -D -i signing/profile.mobileprovision > "${PROFILE_PLIST}"
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print UUID' "${PROFILE_PLIST}")
+          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print Name' "${PROFILE_PLIST}")
+          if [ -z "${PROFILE_UUID}" ] || [ -z "${PROFILE_NAME}" ]; then
+            echo "::error::Failed to extract provisioning profile metadata." >&2
+            exit 1
+          fi
           PROFILE_INSTALL_PATH="${PROFILE_DIR}/${PROFILE_UUID}.mobileprovision"
           mkdir -p "${PROFILE_DIR}"
           cp signing/profile.mobileprovision "${PROFILE_INSTALL_PATH}"
           echo "Installed provisioning profile at ${PROFILE_INSTALL_PATH}"
+          echo "Provisioning profile name: ${PROFILE_NAME}"
           echo "Provisioning profile UUID: ${PROFILE_UUID}"
           echo "Provisioning profile Team ID: ${TEAM_ID}"
           echo "Installed profile SHA256:"
           shasum -a 256 "${PROFILE_INSTALL_PATH}"
+          echo "PROVISIONING_PROFILE_UUID=${PROFILE_UUID}" >> "${GITHUB_ENV}"
+          echo "PROVISIONING_PROFILE_NAME=${PROFILE_NAME}" >> "${GITHUB_ENV}"
 
       - name: Generate export options plist
         shell: bash
@@ -116,6 +131,10 @@ PY
           set -euo pipefail
           if [ -z "${RESOLVED_BUNDLE_ID:-}" ]; then
             echo "::error::Resolved bundle identifier is unavailable." >&2
+            exit 1
+          fi
+          if [ -z "${PROVISIONING_PROFILE_NAME:-}" ]; then
+            echo "::error::Provisioning profile name is unavailable." >&2
             exit 1
           fi
           mkdir -p "$(dirname "${EXPORT_OPTIONS_PATH}")"
@@ -131,7 +150,7 @@ PY
   <key>provisioningProfiles</key>
   <dict>
     <key>${RESOLVED_BUNDLE_ID}</key>
-    <string>${PROFILE_UUID}</string>
+    <string>${PROVISIONING_PROFILE_NAME}</string>
   </dict>
   <key>teamID</key>
   <string>${TEAM_ID}</string>
@@ -147,18 +166,63 @@ PLIST
 
       - name: Archive app
         shell: bash
-        working-directory: wifi-handshake-c
         run: |
           set -euo pipefail
+          if [ -z "${PROVISIONING_PROFILE_NAME:-}" ] || [ -z "${PROVISIONING_PROFILE_UUID:-}" ]; then
+            echo "::error::Provisioning profile metadata is unavailable." >&2
+            exit 1
+          fi
           mkdir -p "$(dirname "${ARCHIVE_PATH}")"
-          IOS_PROJECT_DIR="ios"
+          APP_DIRECTORY="${IOS_APP_PATH:-}"
+          if [ -n "${APP_DIRECTORY}" ]; then
+            if [ ! -d "${APP_DIRECTORY}" ]; then
+              echo "::error::IOS_APP_PATH (${APP_DIRECTORY}) does not exist." >&2
+              exit 1
+            fi
+            APP_ABSOLUTE_PATH="$(cd "${APP_DIRECTORY}" && pwd)"
+          else
+            IOS_DIR_CANDIDATES=()
+            while IFS= read -r dir; do
+              IOS_DIR_CANDIDATES+=("${dir}")
+            done < <(find "${GITHUB_WORKSPACE}" -maxdepth 3 -type d -name ios -print | sort)
+            if [ "${#IOS_DIR_CANDIDATES[@]}" -eq 0 ]; then
+              echo "::error::Unable to locate an ios directory automatically. Set IOS_APP_PATH to the app root." >&2
+              exit 1
+            elif [ "${#IOS_DIR_CANDIDATES[@]}" -gt 1 ]; then
+              echo "::error::Multiple ios directories found. Set IOS_APP_PATH to choose one." >&2
+              printf ' - %s\n' "${IOS_DIR_CANDIDATES[@]}"
+              exit 1
+            fi
+            APP_ABSOLUTE_PATH="$(dirname "${IOS_DIR_CANDIDATES[0]}")"
+          fi
+          APP_ABSOLUTE_PATH="$(cd "${APP_ABSOLUTE_PATH}" && pwd)"
+          echo "Using app directory: ${APP_ABSOLUTE_PATH}"
+          IOS_PROJECT_DIR="${APP_ABSOLUTE_PATH}/ios"
+          if [ ! -d "${IOS_PROJECT_DIR}" ]; then
+            echo "::error::Resolved iOS project directory ${IOS_PROJECT_DIR} does not exist." >&2
+            exit 1
+          fi
+          cd "${APP_ABSOLUTE_PATH}"
           declare -a BUILD_DEST_ARG
-          if compgen -G "${IOS_PROJECT_DIR}/*.xcworkspace" > /dev/null; then
-            WORKSPACE_PATH=$(ls "${IOS_PROJECT_DIR}"/*.xcworkspace | head -n 1)
+          WORKSPACE_COUNT=$(find "${IOS_PROJECT_DIR}" -maxdepth 1 -name "*.xcworkspace" | wc -l | tr -d '[:space:]')
+          PROJECT_COUNT=$(find "${IOS_PROJECT_DIR}" -maxdepth 1 -name "*.xcodeproj" | wc -l | tr -d '[:space:]')
+
+          if [ "${WORKSPACE_COUNT}" -gt 0 ]; then
+            if [ "${WORKSPACE_COUNT}" -gt 1 ]; then
+              echo "::error::Multiple Xcode workspaces found under ${IOS_PROJECT_DIR}. Please specify which to use." >&2
+              find "${IOS_PROJECT_DIR}" -maxdepth 1 -name "*.xcworkspace"
+              exit 1
+            fi
+            WORKSPACE_PATH=$(find "${IOS_PROJECT_DIR}" -maxdepth 1 -name "*.xcworkspace" -print | sort | head -n 1)
             BUILD_DEST_ARG=(-workspace "${WORKSPACE_PATH}")
             echo "Detected workspace: ${WORKSPACE_PATH}"
-          elif compgen -G "${IOS_PROJECT_DIR}/*.xcodeproj" > /dev/null; then
-            PROJECT_PATH=$(ls "${IOS_PROJECT_DIR}"/*.xcodeproj | head -n 1)
+          elif [ "${PROJECT_COUNT}" -gt 0 ]; then
+            if [ "${PROJECT_COUNT}" -gt 1 ]; then
+              echo "::error::Multiple Xcode projects found under ${IOS_PROJECT_DIR}. Please specify which to use." >&2
+              find "${IOS_PROJECT_DIR}" -maxdepth 1 -name "*.xcodeproj"
+              exit 1
+            fi
+            PROJECT_PATH=$(find "${IOS_PROJECT_DIR}" -maxdepth 1 -name "*.xcodeproj" -print | sort | head -n 1)
             BUILD_DEST_ARG=(-project "${PROJECT_PATH}")
             echo "Detected project: ${PROJECT_PATH}"
           else
@@ -174,7 +238,8 @@ PLIST
             CODE_SIGN_STYLE=Manual \
             DEVELOPMENT_TEAM="${TEAM_ID}" \
             PRODUCT_BUNDLE_IDENTIFIER="${RESOLVED_BUNDLE_ID}" \
-            PROVISIONING_PROFILE_SPECIFIER="${PROFILE_UUID}" \
+            PROVISIONING_PROFILE_SPECIFIER="${PROVISIONING_PROFILE_NAME}" \
+            PROVISIONING_PROFILE="${PROVISIONING_PROFILE_UUID}" \
             OTHER_CODE_SIGN_FLAGS="--keychain ${KEYCHAIN_PATH}" \
             archive
 
@@ -187,11 +252,11 @@ PLIST
           set -euo pipefail
           mkdir -p "${EXPORT_PATH}"
           echo "Exporting IPA to ${EXPORT_PATH} using ${EXPORT_OPTIONS_PATH}"
-          env OTHER_CODE_SIGN_FLAGS="--keychain ${KEYCHAIN_PATH}" \
-            xcodebuild -exportArchive \
+          xcodebuild -exportArchive \
             -archivePath "${ARCHIVE_PATH}" \
             -exportPath "${EXPORT_PATH}" \
-            -exportOptionsPlist "${EXPORT_OPTIONS_PATH}"
+            -exportOptionsPlist "${EXPORT_OPTIONS_PATH}" \
+            OTHER_CODE_SIGN_FLAGS="--keychain ${KEYCHAIN_PATH}"
           echo "Export complete. Generated files:"
           find "${EXPORT_PATH}" -maxdepth 1 -type f -print
 
@@ -201,6 +266,13 @@ PLIST
           name: ios-ad-hoc-build
           path: ${{ env.EXPORT_PATH }}
           if-no-files-found: error
+
+      - name: Upload dSYM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ad-hoc-dsyms
+          path: ${{ env.ARCHIVE_PATH }}/dSYMs
+          if-no-files-found: warn
 
       - name: Cleanup keychain
         if: always()
