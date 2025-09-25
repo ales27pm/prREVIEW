@@ -34,6 +34,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Mask sensitive values
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${TEAM_ID:-}" ]; then
+            echo "::add-mask::${TEAM_ID}"
+          fi
+
       - name: Resolve bundle identifier
         shell: bash
         run: |
@@ -129,7 +137,7 @@ jobs:
           echo "Installed provisioning profile at ${PROFILE_INSTALL_PATH}"
           echo "Provisioning profile name: ${PROFILE_NAME}"
           echo "Provisioning profile UUID: ${PROFILE_UUID}"
-          echo "Provisioning profile Team ID: ${TEAM_ID}"
+          echo "Provisioning profile Team ID is configured."
           echo "Installed profile SHA256:"
           shasum -a 256 "${PROFILE_INSTALL_PATH}"
           echo "PROVISIONING_PROFILE_UUID=${PROFILE_UUID}" >> "${GITHUB_ENV}"
@@ -157,7 +165,6 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Add :stripSwiftSymbols bool true' "${EXPORT_OPTIONS_PATH}"
           /usr/libexec/PlistBuddy -c 'Add :compileBitcode bool false' "${EXPORT_OPTIONS_PATH}"
           echo "exportOptions.plist created at ${EXPORT_OPTIONS_PATH}"
-          cat "${EXPORT_OPTIONS_PATH}"
 
       - name: Archive app
         shell: bash
